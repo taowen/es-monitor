@@ -154,13 +154,43 @@ class Translator(object):
             raise Exception('unexpected: %s' % repr(token))
         operator = token.token_next_by_type(0, ttypes.Comparison)
         if '>' == operator.value:
-            return {'range': {token.left.get_name(): {'from': long(token.right.value)}}}
+            return {'range': {token.left.get_name(): {'from': self.eval_numeric_value(token.right.value)}}}
         elif '<' == operator.value:
-            return {'range': {token.left.get_name(): {'to': long(token.right.value)}}}
+            return {'range': {token.left.get_name(): {'to': self.eval_numeric_value(token.right.value)}}}
         elif '=' == operator.value:
-            return {'term': {token.left.get_name(): token.right.value}}
+            return {'term': {token.left.get_name(): eval(token.right.value)}}
         else:
             raise Exception('unexpected: %s' % repr(token))
+
+    def eval_numeric_value(self, token):
+        token_str = str(token).strip()
+        if token_str.startswith('('):
+            token_str = token_str[1:-1]
+        if token_str.startswith('@now'):
+            token_str = token_str[4:].strip()
+            if not token_str:
+                return long(time.time() * long(1000))
+            if '+' == token_str[0]:
+                return long(time.time() * long(1000)) + self.eval_timedelta(token_str[1:])
+            elif '-' == token_str[0]:
+                return long(time.time() * long(1000)) - self.eval_timedelta(token_str[1:])
+            else:
+                raise Exception('unexpected: %s' % repr(token))
+        else:
+            return float(token)
+
+    def eval_timedelta(self, str):
+        if str.endswith('m'):
+            return long(str[:-1]) * long(60*1000)
+        elif str.endswith('s'):
+            return long(str[:-1]) * long(1000)
+        elif str.endswith('h'):
+            return long(str[:-1]) * long(60*60*1000)
+        elif str.endswith('d'):
+            return long(str[:-1]) * long(24*60*60*1000)
+        else:
+            return long(str)
+
 
     def analyze_projections_and_group_by(self):
         group_by_identifiers = {}
