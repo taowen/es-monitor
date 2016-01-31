@@ -47,6 +47,7 @@ class Translator(object):
         # internal state
         self.projections = None
         self.group_by = None
+        self.order_by = None
 
     def on(self, statement):
         getattr(self, 'on_%s' % statement.get_type())(statement)
@@ -66,6 +67,12 @@ class Translator(object):
                     continue
                 elif 'GROUP' == token.value.upper():
                     idx = self.on_GROUP(statement, idx)
+                    continue
+                elif 'ORDER' == token.value.upper():
+                    idx = self.on_ORDER(statement, idx)
+                    continue
+                elif 'LIMIT' == token.value.upper():
+                    idx = self.on_LIMIT(statement, idx)
                     continue
                 else:
                     raise Exception('unexpected: %s' % repr(token))
@@ -98,6 +105,16 @@ class Translator(object):
                 raise Exception('unexpected: %s' % repr(token))
         return idx
 
+    def on_LIMIT(self, statement, idx):
+        while idx < len(statement.tokens):
+            token = statement.tokens[idx]
+            idx += 1
+            if token.ttype in (ttypes.Whitespace, ttypes.Comment):
+                continue
+            self.request['size'] = int(token.value)
+            break
+        return idx
+
     def on_GROUP(self, statement, idx):
         while idx < len(statement.tokens):
             token = statement.tokens[idx]
@@ -117,6 +134,30 @@ class Translator(object):
             if token.ttype in (ttypes.Whitespace, ttypes.Comment):
                 continue
             self.group_by = token
+            return idx
+
+    def on_ORDER(self, statement, idx):
+        while idx < len(statement.tokens):
+            token = statement.tokens[idx]
+            idx += 1
+            if token.ttype in (ttypes.Whitespace, ttypes.Comment):
+                continue
+            if ttypes.Keyword == token.ttype:
+                if 'BY' == token.value.upper():
+                    return self.on_ORDER_BY(statement, idx)
+            else:
+                raise Exception('unexpected: %s' % repr(token))
+
+    def on_ORDER_BY(self, statement, idx):
+        while idx < len(statement.tokens):
+            token = statement.tokens[idx]
+            idx += 1
+            if token.ttype in (ttypes.Whitespace, ttypes.Comment):
+                continue
+            if isinstance(token, stypes.IdentifierList):
+                self.order_by = token.get_identifiers()
+            else:
+                self.order_by = [token]
             return idx
 
     def on_WHERE(self, where):
@@ -276,18 +317,23 @@ class Translator(object):
 
     def analyze_non_aggregation(self):
         if not self.response:
+            self.request['sort'] = []
+            for id in self.order_by:
+                asc_or_desc = 'asc'
+                if 'DESC' == id.tokens[-1].value.upper():
+                    asc_or_desc = 'desc'
+                self.request['sort'].append({id.get_name(): asc_or_desc})
             return  # nothing need to set to request
         self.records = []
         for hit in self.response['hits']['hits']:
             record = {}
             for projection in self.projections:
-                paths = str(projection).strip()
-                if paths.startswith('"'):
-                    paths = paths[1:-1]
                 if projection.ttype == ttypes.Wildcard:
                     record = hit['_source']
                 else:
-                    record[paths] = self.query_object(hit['_source'], paths.split('.'))
+                    record[projection.get_name()] = self.query_object(
+                            hit['_source'],
+                            projection.get_real_name().split('.'))
             self.records.append(record)
 
     def query_object(self, obj, paths):
