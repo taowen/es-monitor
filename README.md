@@ -11,7 +11,7 @@ python es_monitor.py series "SELECT \"user\", oid, max(\"@timestamp\") as value 
 在命令行上测试的时候也可以用stdin传sql参数，比如
 
 ```
-cat << EOF | python es_monitor.py
+cat << EOF | python es_query.py
 SELECT "user", "oid", max("@timestamp") as value FROM gs_api_track_ GROUP BY "user", "oid" WHERE "@timestamp" > 1454239084000
 EOF
 ```
