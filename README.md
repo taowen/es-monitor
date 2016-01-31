@@ -15,3 +15,13 @@ cat << EOF | python es_query.py
 SELECT "user", "oid", max("@timestamp") as value FROM gs_api_track_ GROUP BY "user", "oid" WHERE "@timestamp" > 1454239084000
 EOF
 ```
+
+TODO
+
+* ``` SELECT COUNT(*) FROM index```
+* ``` SELECT timestamp_as_minute, COUNT(*) FROM index GROUP BY date_trunc('minute', timestamp)```
+* ``` SELECT COUNT(DISTINCT user) FROM index```
+* ``` SELECT COUNT(user) FROM index```
+* ``` SELECT SUM(field) FROM index```
+* ``` SELECT user, COUNT(*) FROM index GROUP BY user HAVING COUNT(*) > 10```
+* ``` SELECT user, MAX(value) FROM (SELECT user, COUNT(*) AS value FROM index GROUP BY user)```
