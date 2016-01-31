@@ -39,7 +39,7 @@ class Translator(object):
     def __init__(self):
         # output of request stage
         self.index = None
-        self.request = {'size': 0}
+        self.request = {}
         # input of response stage
         self.response = None
         # output of response stage
@@ -67,13 +67,23 @@ class Translator(object):
                 elif 'GROUP' == token.value.upper():
                     idx = self.on_GROUP(statement, idx)
                     continue
+                else:
+                    raise Exception('unexpected: %s' % repr(token))
             elif isinstance(token, stypes.Where):
                 self.on_WHERE(token)
             elif not from_found:
-                self.projections = token
+                if isinstance(token, stypes.IdentifierList):
+                    self.projections = list(token.get_identifiers())
+                else:
+                    self.projections = [token]
                 continue
             else:
                 raise Exception('unexpected: %s' % repr(token))
+        if self.group_by:
+            self.request['size'] = 0
+            self.analyze_projections_and_group_by()
+        else:
+            self.analyze_non_aggregation()
 
     def on_FROM(self, statement, idx):
         while idx < len(statement.tokens):
@@ -107,7 +117,6 @@ class Translator(object):
             if token.ttype in (ttypes.Whitespace, ttypes.Comment):
                 continue
             self.group_by = token
-            self.analyze_projections_and_group_by()
             return idx
 
     def on_WHERE(self, where):
@@ -181,16 +190,15 @@ class Translator(object):
 
     def eval_timedelta(self, str):
         if str.endswith('m'):
-            return long(str[:-1]) * long(60*1000)
+            return long(str[:-1]) * long(60 * 1000)
         elif str.endswith('s'):
             return long(str[:-1]) * long(1000)
         elif str.endswith('h'):
-            return long(str[:-1]) * long(60*60*1000)
+            return long(str[:-1]) * long(60 * 60 * 1000)
         elif str.endswith('d'):
-            return long(str[:-1]) * long(24*60*60*1000)
+            return long(str[:-1]) * long(24 * 60 * 60 * 1000)
         else:
             return long(str)
-
 
     def analyze_projections_and_group_by(self):
         group_by_identifiers = {}
@@ -203,12 +211,9 @@ class Translator(object):
             group_by_identifiers[self.group_by.get_name()] = self.group_by
         else:
             raise Exception('unexpected: %s' % repr(self.group_by))
-        projections = [self.projections]
-        if isinstance(self.projections, stypes.IdentifierList):
-            projections = self.projections.get_identifiers()
         metrics = {}
         terms_bucket_fields = []
-        for projection in projections:
+        for projection in self.projections:
             if isinstance(projection, stypes.Identifier):
                 if projection.tokens[0].ttype in (ttypes.Name, ttypes.String.Symbol):
                     group_by_identifier = group_by_identifiers.get(projection.get_name())
@@ -268,6 +273,30 @@ class Translator(object):
                 metrics.update({metric_name: {'max': {'field': sql_function.get_parameters()[0].get_name()}}})
         else:
             raise Exception('unsupported function: %s' % repr(sql_function))
+
+    def analyze_non_aggregation(self):
+        if not self.response:
+            return  # nothing need to set to request
+        self.records = []
+        for hit in self.response['hits']['hits']:
+            record = {}
+            for projection in self.projections:
+                paths = str(projection).strip()
+                if paths.startswith('"'):
+                    paths = paths[1:-1]
+                if projection.ttype == ttypes.Wildcard:
+                    record = hit['_source']
+                else:
+                    record[paths] = self.query_object(hit['_source'], paths.split('.'))
+            self.records.append(record)
+
+    def query_object(self, obj, paths):
+        if obj is None:
+            return None
+        if len(paths) == 1:
+            return obj.get(paths[0])
+        else:
+            return self.query_object(obj.get(paths[0]), paths[1:])
 
 
 if __name__ == "__main__":
