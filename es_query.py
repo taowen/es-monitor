@@ -11,16 +11,19 @@ import time
 import json
 from sqlparse import tokens as ttypes
 from sqlparse import sql as stypes
+import pprint
 
 ES_HOSTS = 'http://10.121.89.8/gsapi'
 DEBUG = False
+
 
 def execute_sql(sql):
     statement = sqlparse.parse(sql.strip())[0]
     translator = Translator()
     translator.on(statement)
     if DEBUG:
-        print(translator.request)
+        print('=====')
+        pprint.pprint(translator.request)
     url = ES_HOSTS + '/%s*/_search' % translator.index
     try:
         resp = urllib2.urlopen(url, json.dumps(translator.request)).read()
@@ -29,9 +32,13 @@ def execute_sql(sql):
         return
     except:
         import traceback
+
         sys.stderr.write(traceback.format_exc())
         return
     translator.response = json.loads(resp)
+    if DEBUG:
+        print('=====')
+        pprint.pprint(translator.response)
     translator.on(statement)
     return translator.records
 
@@ -205,42 +212,13 @@ class Translator(object):
             raise Exception('unexpected: %s' % repr(token))
         operator = token.token_next_by_type(0, ttypes.Comparison)
         if '>' == operator.value:
-            return {'range': {token.left.get_name(): {'from': self.eval_numeric_value(str(token.right))}}}
+            return {'range': {token.left.get_name(): {'from': eval_numeric_value(str(token.right))}}}
         elif '<' == operator.value:
-            return {'range': {token.left.get_name(): {'to': self.eval_numeric_value(str(token.right))}}}
+            return {'range': {token.left.get_name(): {'to': eval_numeric_value(str(token.right))}}}
         elif '=' == operator.value:
             return {'term': {token.left.get_name(): eval(token.right.value)}}
         else:
             raise Exception('unexpected: %s' % repr(token))
-
-    def eval_numeric_value(self, token):
-        token_str = str(token).strip()
-        if token_str.startswith('('):
-            token_str = token_str[1:-1]
-        if token_str.startswith('@now'):
-            token_str = token_str[4:].strip()
-            if not token_str:
-                return long(time.time() * long(1000))
-            if '+' == token_str[0]:
-                return long(time.time() * long(1000)) + self.eval_timedelta(token_str[1:])
-            elif '-' == token_str[0]:
-                return long(time.time() * long(1000)) - self.eval_timedelta(token_str[1:])
-            else:
-                raise Exception('unexpected: %s' % repr(token))
-        else:
-            return float(token)
-
-    def eval_timedelta(self, str):
-        if str.endswith('m'):
-            return long(str[:-1]) * long(60 * 1000)
-        elif str.endswith('s'):
-            return long(str[:-1]) * long(1000)
-        elif str.endswith('h'):
-            return long(str[:-1]) * long(60 * 60 * 1000)
-        elif str.endswith('d'):
-            return long(str[:-1]) * long(24 * 60 * 60 * 1000)
-        else:
-            return long(str)
 
     def has_function_projection(self):
         for projection in self.projections:
@@ -296,7 +274,22 @@ class Translator(object):
                         })}
                     }
                 else:
-                    raise NotImplemented()
+                    if isinstance(group_by.tokens[0], stypes.Parenthesis):
+                        tokens = group_by.tokens[0].tokens[1:-1]
+                        if len(tokens) ==1 and isinstance(tokens[0], stypes.Case):
+                            case_when_translator = CaseWhenTranslator()
+                            case_when_translator.on_CASE(tokens[0].tokens[1:])
+                            current_aggs = {
+                                'aggs': {terms_bucket_field: dict(current_aggs, **{
+                                    'range': {
+                                        'field': case_when_translator.field,
+                                        'ranges': case_when_translator.ranges                                    }
+                                })}
+                            }
+                        else:
+                            raise Exception('unexpected: %s' % repr(tokens[0]))
+                    else:
+                        raise Exception('unexpected: %s' % repr(group_by.tokens[0]))
             self.request.update(current_aggs)
 
     def collect_records(self, parent_bucket, terms_bucket_fields, metrics, props):
@@ -319,7 +312,7 @@ class Translator(object):
             if sql_function.get_parameters():
                 raise Exception('only COUNT(*) is supported')
             if self.response:
-                metrics[metric_name] = lambda bucket: bucket['hits']['total'] if 'hits' in bucket else bucket
+                metrics[metric_name] = lambda bucket: bucket['hits']['total'] if 'hits' in bucket else bucket['doc_count']
         elif sql_function_name in ('MAX', 'MIN', 'AVG'):
             if len(sql_function.get_parameters()) != 1:
                 raise Exception('unexpected: %s' % repr(sql_function))
@@ -341,8 +334,8 @@ class Translator(object):
                         record = hit['_source']
                     else:
                         record[projection.get_name()] = self.get_object_member(
-                                hit['_source'],
-                                projection.get_real_name().split('.'))
+                            hit['_source'],
+                            projection.get_real_name().split('.'))
                 self.records.append(record)
         else:
             self.request['sort'] = []
@@ -361,10 +354,124 @@ class Translator(object):
             return self.get_object_member(obj.get(paths[0]), paths[1:])
 
 
+class CaseWhenTranslator(object):
+    def __init__(self):
+        self.ranges = []
+        self.field = None
+
+    def on_CASE(self, tokens):
+        idx = 0
+        while idx < len(tokens):
+            token = tokens[idx]
+            idx += 1
+            if token.ttype in (ttypes.Whitespace, ttypes.Comment):
+                continue
+            if 'WHEN' == token.value.upper():
+                idx = self.on_WHEN(tokens, idx)
+            elif 'ELSE' == token.value.upper():
+                idx = self.on_ELSE(tokens, idx)
+            elif 'END' == token.value.upper():
+                break
+            else:
+                raise Exception('unexpected: %s' % repr(token))
+        return self.build()
+
+    def on_WHEN(self, tokens, idx):
+        current_range = {}
+        idx = skip_whitespace(tokens, idx)
+        token = tokens[idx]
+        self.parse_comparison(current_range, token)
+        idx = skip_whitespace(tokens, idx + 1)
+        token = tokens[idx]
+        if 'AND' == token.value.upper():
+            idx = skip_whitespace(tokens, idx + 1)
+            token = tokens[idx]
+            self.parse_comparison(current_range, token)
+            idx = skip_whitespace(tokens, idx+1)
+            token = tokens[idx]
+        if 'THEN' != token.value.upper():
+            raise Exception('unexpected: %s' % repr(token))
+        idx = skip_whitespace(tokens, idx + 1)
+        token = tokens[idx]
+        idx += 1
+        current_range['key'] = eval(token.value)
+        self.ranges.append(current_range)
+        return idx
+
+    def parse_comparison(self, current_range, token):
+        if isinstance(token, stypes.Comparison):
+            operator = str(token.token_next_by_type(0, ttypes.Comparison))
+            if '>=' == operator:
+                current_range['from'] = eval_numeric_value(str(token.right))
+            elif '<' == operator:
+                current_range['to'] = eval_numeric_value(str(token.right))
+            else:
+                raise Exception('unexpected: %s' % repr(token))
+            self.set_field(token.left.get_name())
+        else:
+            raise Exception('unexpected: %s' % repr(token))
+
+    def on_ELSE(self, tokens, idx):
+        raise Exception('else is not supported')
+
+    def set_field(self, field):
+        if self.field is None:
+            self.field = field
+        elif self.field != field:
+            raise Exception('can only case when on single field: %s %s' % (self.field, field))
+        else:
+            self.field = field
+
+    def build(self):
+        if not self.field or not self.ranges:
+            raise Exception('internal error')
+
+
+def skip_whitespace(tokens, idx):
+    while idx < len(tokens):
+        token = tokens[idx]
+        if token.ttype in (ttypes.Whitespace, ttypes.Comment):
+            idx += 1
+            continue
+        else:
+            break
+    return idx
+
+
+def eval_numeric_value(token):
+    token_str = str(token).strip()
+    if token_str.startswith('('):
+        token_str = token_str[1:-1]
+    if token_str.startswith('@now'):
+        token_str = token_str[4:].strip()
+        if not token_str:
+            return long(time.time() * long(1000))
+        if '+' == token_str[0]:
+            return long(time.time() * long(1000)) + eval_timedelta(token_str[1:])
+        elif '-' == token_str[0]:
+            return long(time.time() * long(1000)) - eval_timedelta(token_str[1:])
+        else:
+            raise Exception('unexpected: %s' % repr(token))
+    else:
+        return float(token)
+
+def eval_timedelta(str):
+    if str.endswith('m'):
+        return long(str[:-1]) * long(60 * 1000)
+    elif str.endswith('s'):
+        return long(str[:-1]) * long(1000)
+    elif str.endswith('h'):
+        return long(str[:-1]) * long(60 * 60 * 1000)
+    elif str.endswith('d'):
+        return long(str[:-1]) * long(24 * 60 * 60 * 1000)
+    else:
+        return long(str)
+
 if __name__ == "__main__":
     DEBUG = True
     sql = sys.stdin.read()
     records = execute_sql(sql)
+    print('=====')
     for record in records:
         print json.dumps(record)
     sys.exit(0 if records else 1)
