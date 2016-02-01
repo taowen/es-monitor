@@ -23,8 +23,7 @@ EOF
 
 TODO
 
-* ``` SELECT COUNT(DISTINCT user) FROM index```
-* ``` SELECT COUNT(user) FROM index```
 * ``` SELECT SUM(field) FROM index```
 * ``` SELECT user, COUNT(*) FROM index GROUP BY user HAVING COUNT(*) > 10```
 * ``` SELECT user, MAX(value) FROM (SELECT user, COUNT(*) AS value FROM index GROUP BY user)```
+* aggregation & sort & limit

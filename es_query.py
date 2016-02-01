@@ -224,6 +224,9 @@ class Translator(object):
         for projection in self.projections:
             if isinstance(projection, stypes.Function):
                 return True
+            elif isinstance(projection, stypes.Identifier):
+                if isinstance(projection.tokens[0], stypes.Function):
+                    return True
         return False
 
     def analyze_projections_and_group_by(self):
@@ -267,7 +270,7 @@ class Translator(object):
                 current_aggs = {'aggs': metrics}
             for terms_bucket_field in terms_bucket_fields:
                 group_by = group_by_identifiers.get(terms_bucket_field)
-                if ttypes.Name == group_by.tokens[0].ttype:
+                if group_by.tokens[0].ttype in (ttypes.Name, ttypes.String.Symbol):
                     current_aggs = {
                         'aggs': {terms_bucket_field: dict(current_aggs, **{
                             'terms': {'field': terms_bucket_field, 'size': 0}
@@ -320,7 +323,8 @@ class Translator(object):
         if terms_bucket_fields:
             current_response = parent_bucket[terms_bucket_fields[0]]
             for child_bucket in current_response['buckets']:
-                child_props = dict(props, **{terms_bucket_fields[0]: child_bucket['key_as_string']})
+                child_bucket_key = child_bucket['key_as_string'] if 'key_as_string' in child_bucket else child_bucket['key']
+                child_props = dict(props, **{terms_bucket_fields[0]: child_bucket_key})
                 self.collect_records(child_bucket, terms_bucket_fields[1:], metrics, child_props)
         else:
             record = props
@@ -333,10 +337,26 @@ class Translator(object):
             raise Exception('unexpected: %s' % repr(sql_function))
         sql_function_name = sql_function.tokens[0].get_name().upper()
         if 'COUNT' == sql_function_name:
-            if sql_function.get_parameters():
-                raise Exception('only COUNT(*) is supported')
-            if self.response:
-                metrics[metric_name] = lambda bucket: bucket['hits']['total'] if 'hits' in bucket else bucket['doc_count']
+            params = list(sql_function.get_parameters())
+            if params:
+                count_keyword = sql_function.tokens[1].token_next_by_type(0, ttypes.Keyword)
+                if self.response:
+                    metrics[metric_name] = lambda bucket: bucket[metric_name]['value']
+                else:
+                    if count_keyword:
+                        if 'DISTINCT' == count_keyword.value.upper():
+                            metrics.update({metric_name: {
+                                'cardinality': {
+                                    'field': params[0].get_name()
+                                }}})
+                        else:
+                            raise Exception('unexpected: %s' % repr(count_keyword))
+                    else:
+                        metrics.update({metric_name: {
+                            'value_count': {'field': params[0].get_name()}}})
+            else:
+                if self.response:
+                    metrics[metric_name] = lambda bucket: bucket['hits']['total'] if 'hits' in bucket else bucket['doc_count']
         elif sql_function_name in ('MAX', 'MIN', 'AVG'):
             if len(sql_function.get_parameters()) != 1:
                 raise Exception('unexpected: %s' % repr(sql_function))
