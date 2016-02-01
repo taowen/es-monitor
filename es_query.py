@@ -288,6 +288,30 @@ class Translator(object):
                             }
                         else:
                             raise Exception('unexpected: %s' % repr(tokens[0]))
+                    elif isinstance(group_by.tokens[0], stypes.Function):
+                        date_format = None
+                        if 'to_char' == group_by.tokens[0].get_name():
+                            to_char_params = list(group_by.tokens[0].get_parameters())
+                            sql_function = to_char_params[0]
+                            date_format = eval(to_char_params[1].value)
+                        else:
+                            sql_function = group_by.tokens[0]
+                        if 'date_trunc' == sql_function.get_name():
+                            parameters = tuple(sql_function.get_parameters())
+                            interval, field = parameters
+                            current_aggs = {
+                                'aggs': {terms_bucket_field: dict(current_aggs, **{
+                                    'date_histogram': {
+                                        'field': field.get_name(),
+                                        'time_zone': '+08:00',
+                                        'interval': eval(interval.value)
+                                    }
+                                })}
+                            }
+                            if date_format:
+                                current_aggs['aggs'][terms_bucket_field]['date_histogram']['format'] = date_format
+                        else:
+                            raise Exception('unexpected: %s' % repr(sql_function))
                     else:
                         raise Exception('unexpected: %s' % repr(group_by.tokens[0]))
             self.request.update(current_aggs)
@@ -296,7 +320,7 @@ class Translator(object):
         if terms_bucket_fields:
             current_response = parent_bucket[terms_bucket_fields[0]]
             for child_bucket in current_response['buckets']:
-                child_props = dict(props, **{terms_bucket_fields[0]: child_bucket['key']})
+                child_props = dict(props, **{terms_bucket_fields[0]: child_bucket['key_as_string']})
                 self.collect_records(child_bucket, terms_bucket_fields[1:], metrics, child_props)
         else:
             record = props
