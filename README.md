@@ -18,7 +18,6 @@ EOF
 
 TODO
 
-* ``` SELECT COUNT(*) FROM index```
 * ``` SELECT timestamp_as_minute, COUNT(*) FROM index GROUP BY date_trunc('minute', timestamp)```
 * ``` SELECT COUNT(DISTINCT user) FROM index```
 * ``` SELECT COUNT(user) FROM index```

@@ -13,12 +13,14 @@ from sqlparse import tokens as ttypes
 from sqlparse import sql as stypes
 
 ES_HOSTS = 'http://10.121.89.8/gsapi'
-
+DEBUG = False
 
 def execute_sql(sql):
     statement = sqlparse.parse(sql.strip())[0]
     translator = Translator()
     translator.on(statement)
+    if DEBUG:
+        print(translator.request)
     url = ES_HOSTS + '/%s*/_search' % translator.index
     try:
         resp = urllib2.urlopen(url, json.dumps(translator.request)).read()
@@ -85,7 +87,7 @@ class Translator(object):
                 continue
             else:
                 raise Exception('unexpected: %s' % repr(token))
-        if self.group_by:
+        if self.group_by or self.has_function_projection():
             self.request['size'] = 0
             self.analyze_projections_and_group_by()
         else:
@@ -203,9 +205,9 @@ class Translator(object):
             raise Exception('unexpected: %s' % repr(token))
         operator = token.token_next_by_type(0, ttypes.Comparison)
         if '>' == operator.value:
-            return {'range': {token.left.get_name(): {'from': self.eval_numeric_value(token.right.value)}}}
+            return {'range': {token.left.get_name(): {'from': self.eval_numeric_value(str(token.right))}}}
         elif '<' == operator.value:
-            return {'range': {token.left.get_name(): {'to': self.eval_numeric_value(token.right.value)}}}
+            return {'range': {token.left.get_name(): {'to': self.eval_numeric_value(str(token.right))}}}
         elif '=' == operator.value:
             return {'term': {token.left.get_name(): eval(token.right.value)}}
         else:
@@ -240,26 +242,33 @@ class Translator(object):
         else:
             return long(str)
 
+    def has_function_projection(self):
+        for projection in self.projections:
+            if isinstance(projection, stypes.Function):
+                return True
+        return False
+
     def analyze_projections_and_group_by(self):
         group_by_identifiers = {}
-        if isinstance(self.group_by, stypes.IdentifierList):
-            for id in self.group_by.get_identifiers():
-                if ttypes.Keyword == id.ttype:
-                    raise Exception('%s is keyword' % id.value)
-                group_by_identifiers[id.get_name()] = id
-        elif isinstance(self.group_by, stypes.Identifier):
-            group_by_identifiers[self.group_by.get_name()] = self.group_by
-        else:
-            raise Exception('unexpected: %s' % repr(self.group_by))
+        if self.group_by:
+            if isinstance(self.group_by, stypes.IdentifierList):
+                for id in self.group_by.get_identifiers():
+                    if ttypes.Keyword == id.ttype:
+                        raise Exception('%s is keyword' % id.value)
+                    elif isinstance(id, stypes.Identifier):
+                        group_by_identifiers[id.get_name()] = id
+                    else:
+                        raise Exception('unexpected: %s' % repr(id))
+            elif isinstance(self.group_by, stypes.Identifier):
+                group_by_identifiers[self.group_by.get_name()] = self.group_by
+            else:
+                raise Exception('unexpected: %s' % repr(self.group_by))
         metrics = {}
-        terms_bucket_fields = []
         for projection in self.projections:
             if isinstance(projection, stypes.Identifier):
                 if projection.tokens[0].ttype in (ttypes.Name, ttypes.String.Symbol):
-                    group_by_identifier = group_by_identifiers.get(projection.get_name())
-                    if not group_by_identifier:
+                    if not group_by_identifiers.get(projection.get_name()):
                         raise Exception('unexpected: %s' % repr(projection))
-                    terms_bucket_fields.append(group_by_identifier.get_name())
                 elif isinstance(projection.tokens[0], stypes.Function):
                     self.create_metric_aggregation(metrics, projection.tokens[0], projection.get_name())
                 else:
@@ -268,19 +277,26 @@ class Translator(object):
                 self.create_metric_aggregation(metrics, projection, projection.get_name())
             else:
                 raise Exception('unexpected: %s' % repr(projection))
+        terms_bucket_fields = sorted(group_by_identifiers.keys())
         if self.response:
             self.records = []
-            self.collect_records(self.response['aggregations'], list(reversed(terms_bucket_fields)), metrics, {})
+            agg_response = dict(self.response.get('aggregations') or self.response)
+            agg_response.update(self.response)
+            self.collect_records(agg_response, list(reversed(terms_bucket_fields)), metrics, {})
         else:
             current_aggs = {}
             if metrics:
                 current_aggs = {'aggs': metrics}
             for terms_bucket_field in terms_bucket_fields:
-                current_aggs = {
-                    'aggs': {terms_bucket_field: dict(current_aggs, **{
-                        'terms': {'field': terms_bucket_field, 'size': 0}
-                    })}
-                }
+                group_by = group_by_identifiers.get(terms_bucket_field)
+                if ttypes.Name == group_by.tokens[0].ttype:
+                    current_aggs = {
+                        'aggs': {terms_bucket_field: dict(current_aggs, **{
+                            'terms': {'field': terms_bucket_field, 'size': 0}
+                        })}
+                    }
+                else:
+                    raise NotImplemented()
             self.request.update(current_aggs)
 
     def collect_records(self, parent_bucket, terms_bucket_fields, metrics, props):
@@ -303,7 +319,7 @@ class Translator(object):
             if sql_function.get_parameters():
                 raise Exception('only COUNT(*) is supported')
             if self.response:
-                metrics[metric_name] = lambda bucket: bucket['doc_count']
+                metrics[metric_name] = lambda bucket: bucket['hits']['total'] if 'hits' in bucket else bucket
         elif sql_function_name in ('MAX', 'MIN', 'AVG'):
             if len(sql_function.get_parameters()) != 1:
                 raise Exception('unexpected: %s' % repr(sql_function))
@@ -346,6 +362,7 @@ class Translator(object):
 
 
 if __name__ == "__main__":
+    DEBUG = True
     sql = sys.stdin.read()
     records = execute_sql(sql)
     for record in records:
