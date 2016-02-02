@@ -52,10 +52,13 @@ class Translator(object):
         self.response = None
         # output of response stage
         self.records = None
+
         # internal state
         self.projections = None
         self.group_by = None
         self.order_by = None
+        self.having = None
+
 
     def on(self, statement):
         getattr(self, 'on_%s' % statement.get_type())(statement)
@@ -81,6 +84,9 @@ class Translator(object):
                     continue
                 elif 'LIMIT' == token.value.upper():
                     idx = self.on_LIMIT(statement, idx)
+                    continue
+                elif 'HAVING' == token.value.upper():
+                    idx = self.on_HAVING(statement, idx)
                     continue
                 else:
                     raise Exception('unexpected: %s' % repr(token))
@@ -123,6 +129,19 @@ class Translator(object):
             break
         return idx
 
+    def on_HAVING(self, statement, idx):
+        self.having = []
+        while idx < len(statement.tokens):
+            token = statement.tokens[idx]
+            idx += 1
+            if token.ttype in (ttypes.Whitespace, ttypes.Comment):
+                continue
+            if ttypes.Keyword == token.ttype and token.value.upper() in set('ORDER', 'LIMIT'):
+                idx -= 1
+                break
+            self.having.append(token)
+        return idx
+
     def on_GROUP(self, statement, idx):
         while idx < len(statement.tokens):
             token = statement.tokens[idx]
@@ -141,7 +160,19 @@ class Translator(object):
             idx += 1
             if token.ttype in (ttypes.Whitespace, ttypes.Comment):
                 continue
-            self.group_by = token
+            self.group_by = {}
+            if isinstance(token, stypes.IdentifierList):
+                for id in token.get_identifiers():
+                    if ttypes.Keyword == id.ttype:
+                        raise Exception('%s is keyword' % id.value)
+                    elif isinstance(id, stypes.Identifier):
+                        self.group_by[id.get_name()] = id
+                    else:
+                        raise Exception('unexpected: %s' % repr(id))
+            elif isinstance(token, stypes.Identifier):
+                self.group_by[token.get_name()] = token
+            else:
+                raise Exception('unexpected: %s' % repr(token))
             return idx
 
     def on_ORDER(self, statement, idx):
@@ -230,25 +261,11 @@ class Translator(object):
         return False
 
     def analyze_projections_and_group_by(self):
-        group_by_identifiers = {}
-        if self.group_by:
-            if isinstance(self.group_by, stypes.IdentifierList):
-                for id in self.group_by.get_identifiers():
-                    if ttypes.Keyword == id.ttype:
-                        raise Exception('%s is keyword' % id.value)
-                    elif isinstance(id, stypes.Identifier):
-                        group_by_identifiers[id.get_name()] = id
-                    else:
-                        raise Exception('unexpected: %s' % repr(id))
-            elif isinstance(self.group_by, stypes.Identifier):
-                group_by_identifiers[self.group_by.get_name()] = self.group_by
-            else:
-                raise Exception('unexpected: %s' % repr(self.group_by))
         metrics = {}
         for projection in self.projections:
             if isinstance(projection, stypes.Identifier):
                 if projection.tokens[0].ttype in (ttypes.Name, ttypes.String.Symbol):
-                    if not group_by_identifiers.get(projection.get_name()):
+                    if not self.group_by.get(projection.get_name()):
                         raise Exception('unexpected: %s' % repr(projection))
                 elif isinstance(projection.tokens[0], stypes.Function):
                     self.create_metric_aggregation(metrics, projection.tokens[0], projection.get_name())
@@ -258,75 +275,104 @@ class Translator(object):
                 self.create_metric_aggregation(metrics, projection, projection.get_name())
             else:
                 raise Exception('unexpected: %s' % repr(projection))
-        group_by_names = sorted(group_by_identifiers.keys())
+        group_by_names = sorted(self.group_by.keys())
         if self.response:
             self.records = []
             agg_response = dict(self.response.get('aggregations') or self.response)
             agg_response.update(self.response)
             self.collect_records(agg_response, list(reversed(group_by_names)), metrics, {})
         else:
-            self.add_aggs_to_request(group_by_names, group_by_identifiers, metrics)
+            self.add_aggs_to_request(group_by_names, metrics)
 
-    def add_aggs_to_request(self, group_by_names, group_by_identifiers, metrics):
-        current_aggs = {}
+    def add_aggs_to_request(self, group_by_names, metrics):
+        current_aggs = {'aggs': {}}
         if metrics:
             current_aggs = {'aggs': metrics}
-        for terms_bucket_field in group_by_names:
-            group_by = group_by_identifiers.get(terms_bucket_field)
+        bucket_selector_agg = {'buckets_path': {}, 'script': {'lang': 'expression', 'inline': ''}}
+        self.process_having_agg(bucket_selector_agg, self.having)
+        current_aggs['aggs']['having'] = {'bucket_selector': bucket_selector_agg}
+        for group_by_name in group_by_names:
+            group_by = self.group_by.get(group_by_name)
             if group_by.tokens[0].ttype in (ttypes.Name, ttypes.String.Symbol):
-                current_aggs = {
-                    'aggs': {terms_bucket_field: dict(current_aggs, **{
-                        'terms': {'field': terms_bucket_field, 'size': 0}
-                    })}
-                }
+                current_aggs = self.append_terms_agg(current_aggs, group_by_name)
             else:
                 if isinstance(group_by.tokens[0], stypes.Parenthesis):
-                    tokens = group_by.tokens[0].tokens[1:-1]
-                    if len(tokens) == 1 and isinstance(tokens[0], stypes.Case):
-                        case_when_translator = CaseWhenTranslator()
-                        case_when_translator.on_CASE(tokens[0].tokens[1:])
-                        current_aggs = {
-                            'aggs': {terms_bucket_field: dict(current_aggs, **{
-                                'range': {
-                                    'field': case_when_translator.field,
-                                    'ranges': case_when_translator.ranges}
-                            })}
-                        }
-                    else:
-                        raise Exception('unexpected: %s' % repr(tokens[0]))
+                    current_aggs = self.append_range_agg(current_aggs, group_by, group_by_name)
                 elif isinstance(group_by.tokens[0], stypes.Function):
-                    date_format = None
-                    if 'to_char' == group_by.tokens[0].get_name():
-                        to_char_params = list(group_by.tokens[0].get_parameters())
-                        sql_function = to_char_params[0]
-                        date_format = eval(to_char_params[1].value)
-                    else:
-                        sql_function = group_by.tokens[0]
-                    if 'date_trunc' == sql_function.get_name():
-                        parameters = tuple(sql_function.get_parameters())
-                        interval, field = parameters
-                        current_aggs = {
-                            'aggs': {terms_bucket_field: dict(current_aggs, **{
-                                'date_histogram': {
-                                    'field': field.get_name(),
-                                    'time_zone': '+08:00',
-                                    'interval': eval(interval.value)
-                                }
-                            })}
-                        }
-                        if date_format:
-                            current_aggs['aggs'][terms_bucket_field]['date_histogram']['format'] = date_format
-                    else:
-                        raise Exception('unexpected: %s' % repr(sql_function))
+                    current_aggs = self.append_date_histogram_agg(current_aggs, group_by, group_by_name)
                 else:
                     raise Exception('unexpected: %s' % repr(group_by.tokens[0]))
         self.request.update(current_aggs)
+
+    def process_having_agg(self, bucket_selector_agg, tokens):
+        for token in tokens:
+            if '@now' in token.value:
+                bucket_selector_agg['script']['inline'] = '%s%s' % (
+                    bucket_selector_agg['script']['inline'], eval_numeric_value(token.value))
+            elif token.is_group():
+                self.process_having_agg(bucket_selector_agg, token.tokens)
+            else:
+                if ttypes.Name == token.ttype:
+                    bucket_selector_agg['buckets_path'][token.value] = token.value
+                bucket_selector_agg['script']['inline'] = '%s%s' % (
+                    bucket_selector_agg['script']['inline'], token.value)
+
+    def append_terms_agg(self, current_aggs, group_by_name):
+        current_aggs = {
+            'aggs': {group_by_name: dict(current_aggs, **{
+                'terms': {'field': group_by_name, 'size': 0}
+            })}
+        }
+        return current_aggs
+
+    def append_date_histogram_agg(self, current_aggs, group_by, group_by_name):
+        date_format = None
+        if 'to_char' == group_by.tokens[0].get_name():
+            to_char_params = list(group_by.tokens[0].get_parameters())
+            sql_function = to_char_params[0]
+            date_format = eval(to_char_params[1].value)
+        else:
+            sql_function = group_by.tokens[0]
+        if 'date_trunc' == sql_function.get_name():
+            parameters = tuple(sql_function.get_parameters())
+            interval, field = parameters
+            current_aggs = {
+                'aggs': {group_by_name: dict(current_aggs, **{
+                    'date_histogram': {
+                        'field': field.get_name(),
+                        'time_zone': '+08:00',
+                        'interval': eval(interval.value)
+                    }
+                })}
+            }
+            if date_format:
+                current_aggs['aggs'][group_by_name]['date_histogram']['format'] = date_format
+        else:
+            raise Exception('unexpected: %s' % repr(sql_function))
+        return current_aggs
+
+    def append_range_agg(self, current_aggs, group_by, group_by_name):
+        tokens = group_by.tokens[0].tokens[1:-1]
+        if len(tokens) == 1 and isinstance(tokens[0], stypes.Case):
+            case_when_translator = CaseWhenTranslator()
+            case_when_translator.on_CASE(tokens[0].tokens[1:])
+            current_aggs = {
+                'aggs': {group_by_name: dict(current_aggs, **{
+                    'range': {
+                        'field': case_when_translator.field,
+                        'ranges': case_when_translator.ranges}
+                })}
+            }
+        else:
+            raise Exception('unexpected: %s' % repr(tokens[0]))
+        return current_aggs
 
     def collect_records(self, parent_bucket, terms_bucket_fields, metrics, props):
         if terms_bucket_fields:
             current_response = parent_bucket[terms_bucket_fields[0]]
             for child_bucket in current_response['buckets']:
-                child_bucket_key = child_bucket['key_as_string'] if 'key_as_string' in child_bucket else child_bucket['key']
+                child_bucket_key = child_bucket['key_as_string'] if 'key_as_string' in child_bucket else child_bucket[
+                    'key']
                 child_props = dict(props, **{terms_bucket_fields[0]: child_bucket_key})
                 self.collect_records(child_bucket, terms_bucket_fields[1:], metrics, child_props)
         else:
@@ -359,7 +405,8 @@ class Translator(object):
                             'value_count': {'field': params[0].get_name()}}})
             else:
                 if self.response:
-                    metrics[metric_name] = lambda bucket: bucket['hits']['total'] if 'hits' in bucket else bucket['doc_count']
+                    metrics[metric_name] = lambda bucket: bucket['hits']['total'] if 'hits' in bucket else bucket[
+                        'doc_count']
         elif sql_function_name in ('MAX', 'MIN', 'AVG', 'SUM'):
             if len(sql_function.get_parameters()) != 1:
                 raise Exception('unexpected: %s' % repr(sql_function))
@@ -434,7 +481,7 @@ class CaseWhenTranslator(object):
             idx = skip_whitespace(tokens, idx + 1)
             token = tokens[idx]
             self.parse_comparison(current_range, token)
-            idx = skip_whitespace(tokens, idx+1)
+            idx = skip_whitespace(tokens, idx + 1)
             token = tokens[idx]
         if 'THEN' != token.value.upper():
             raise Exception('unexpected: %s' % repr(token))
@@ -502,6 +549,7 @@ def eval_numeric_value(token):
     else:
         return float(token)
 
+
 def eval_timedelta(str):
     if str.endswith('m'):
         return long(str[:-1]) * long(60 * 1000)
@@ -513,6 +561,7 @@ def eval_timedelta(str):
         return long(str[:-1]) * long(24 * 60 * 60 * 1000)
     else:
         return long(str)
+
 
 if __name__ == "__main__":
     DEBUG = True
