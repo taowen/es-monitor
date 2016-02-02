@@ -258,66 +258,69 @@ class Translator(object):
                 self.create_metric_aggregation(metrics, projection, projection.get_name())
             else:
                 raise Exception('unexpected: %s' % repr(projection))
-        terms_bucket_fields = sorted(group_by_identifiers.keys())
+        group_by_names = sorted(group_by_identifiers.keys())
         if self.response:
             self.records = []
             agg_response = dict(self.response.get('aggregations') or self.response)
             agg_response.update(self.response)
-            self.collect_records(agg_response, list(reversed(terms_bucket_fields)), metrics, {})
+            self.collect_records(agg_response, list(reversed(group_by_names)), metrics, {})
         else:
-            current_aggs = {}
-            if metrics:
-                current_aggs = {'aggs': metrics}
-            for terms_bucket_field in terms_bucket_fields:
-                group_by = group_by_identifiers.get(terms_bucket_field)
-                if group_by.tokens[0].ttype in (ttypes.Name, ttypes.String.Symbol):
-                    current_aggs = {
-                        'aggs': {terms_bucket_field: dict(current_aggs, **{
-                            'terms': {'field': terms_bucket_field, 'size': 0}
-                        })}
-                    }
-                else:
-                    if isinstance(group_by.tokens[0], stypes.Parenthesis):
-                        tokens = group_by.tokens[0].tokens[1:-1]
-                        if len(tokens) ==1 and isinstance(tokens[0], stypes.Case):
-                            case_when_translator = CaseWhenTranslator()
-                            case_when_translator.on_CASE(tokens[0].tokens[1:])
-                            current_aggs = {
-                                'aggs': {terms_bucket_field: dict(current_aggs, **{
-                                    'range': {
-                                        'field': case_when_translator.field,
-                                        'ranges': case_when_translator.ranges                                    }
-                                })}
-                            }
-                        else:
-                            raise Exception('unexpected: %s' % repr(tokens[0]))
-                    elif isinstance(group_by.tokens[0], stypes.Function):
-                        date_format = None
-                        if 'to_char' == group_by.tokens[0].get_name():
-                            to_char_params = list(group_by.tokens[0].get_parameters())
-                            sql_function = to_char_params[0]
-                            date_format = eval(to_char_params[1].value)
-                        else:
-                            sql_function = group_by.tokens[0]
-                        if 'date_trunc' == sql_function.get_name():
-                            parameters = tuple(sql_function.get_parameters())
-                            interval, field = parameters
-                            current_aggs = {
-                                'aggs': {terms_bucket_field: dict(current_aggs, **{
-                                    'date_histogram': {
-                                        'field': field.get_name(),
-                                        'time_zone': '+08:00',
-                                        'interval': eval(interval.value)
-                                    }
-                                })}
-                            }
-                            if date_format:
-                                current_aggs['aggs'][terms_bucket_field]['date_histogram']['format'] = date_format
-                        else:
-                            raise Exception('unexpected: %s' % repr(sql_function))
+            self.add_aggs_to_request(group_by_names, group_by_identifiers, metrics)
+
+    def add_aggs_to_request(self, group_by_names, group_by_identifiers, metrics):
+        current_aggs = {}
+        if metrics:
+            current_aggs = {'aggs': metrics}
+        for terms_bucket_field in group_by_names:
+            group_by = group_by_identifiers.get(terms_bucket_field)
+            if group_by.tokens[0].ttype in (ttypes.Name, ttypes.String.Symbol):
+                current_aggs = {
+                    'aggs': {terms_bucket_field: dict(current_aggs, **{
+                        'terms': {'field': terms_bucket_field, 'size': 0}
+                    })}
+                }
+            else:
+                if isinstance(group_by.tokens[0], stypes.Parenthesis):
+                    tokens = group_by.tokens[0].tokens[1:-1]
+                    if len(tokens) == 1 and isinstance(tokens[0], stypes.Case):
+                        case_when_translator = CaseWhenTranslator()
+                        case_when_translator.on_CASE(tokens[0].tokens[1:])
+                        current_aggs = {
+                            'aggs': {terms_bucket_field: dict(current_aggs, **{
+                                'range': {
+                                    'field': case_when_translator.field,
+                                    'ranges': case_when_translator.ranges}
+                            })}
+                        }
                     else:
-                        raise Exception('unexpected: %s' % repr(group_by.tokens[0]))
-            self.request.update(current_aggs)
+                        raise Exception('unexpected: %s' % repr(tokens[0]))
+                elif isinstance(group_by.tokens[0], stypes.Function):
+                    date_format = None
+                    if 'to_char' == group_by.tokens[0].get_name():
+                        to_char_params = list(group_by.tokens[0].get_parameters())
+                        sql_function = to_char_params[0]
+                        date_format = eval(to_char_params[1].value)
+                    else:
+                        sql_function = group_by.tokens[0]
+                    if 'date_trunc' == sql_function.get_name():
+                        parameters = tuple(sql_function.get_parameters())
+                        interval, field = parameters
+                        current_aggs = {
+                            'aggs': {terms_bucket_field: dict(current_aggs, **{
+                                'date_histogram': {
+                                    'field': field.get_name(),
+                                    'time_zone': '+08:00',
+                                    'interval': eval(interval.value)
+                                }
+                            })}
+                        }
+                        if date_format:
+                            current_aggs['aggs'][terms_bucket_field]['date_histogram']['format'] = date_format
+                    else:
+                        raise Exception('unexpected: %s' % repr(sql_function))
+                else:
+                    raise Exception('unexpected: %s' % repr(group_by.tokens[0]))
+        self.request.update(current_aggs)
 
     def collect_records(self, parent_bucket, terms_bucket_fields, metrics, props):
         if terms_bucket_fields:
@@ -357,7 +360,7 @@ class Translator(object):
             else:
                 if self.response:
                     metrics[metric_name] = lambda bucket: bucket['hits']['total'] if 'hits' in bucket else bucket['doc_count']
-        elif sql_function_name in ('MAX', 'MIN', 'AVG'):
+        elif sql_function_name in ('MAX', 'MIN', 'AVG', 'SUM'):
             if len(sql_function.get_parameters()) != 1:
                 raise Exception('unexpected: %s' % repr(sql_function))
             if self.response:
