@@ -59,7 +59,6 @@ class Translator(object):
         self.order_by = None
         self.having = None
 
-
     def on(self, statement):
         getattr(self, 'on_%s' % statement.get_type())(statement)
 
@@ -93,10 +92,7 @@ class Translator(object):
             elif isinstance(token, stypes.Where):
                 self.on_WHERE(token)
             elif not from_found:
-                if isinstance(token, stypes.IdentifierList):
-                    self.projections = list(token.get_identifiers())
-                else:
-                    self.projections = [token]
+                self.set_projections(token)
                 continue
             else:
                 raise Exception('unexpected: %s' % repr(token))
@@ -105,6 +101,21 @@ class Translator(object):
             self.analyze_projections_and_group_by()
         else:
             self.analyze_non_aggregation()
+
+    def set_projections(self, token):
+        if isinstance(token, stypes.IdentifierList):
+            ids = list(token.get_identifiers())
+        else:
+            ids = [token]
+        self.projections = {}
+        for id in ids:
+            if isinstance(id, stypes.TokenList):
+                if isinstance(id, stypes.Identifier):
+                    self.projections[id.get_name()] = id.tokens[0]
+                else:
+                    self.projections[id.get_name()] = id
+            else:
+                self.projections[id.value] = id
 
     def on_FROM(self, statement, idx):
         while idx < len(statement.tokens):
@@ -133,13 +144,11 @@ class Translator(object):
         self.having = []
         while idx < len(statement.tokens):
             token = statement.tokens[idx]
-            idx += 1
-            if token.ttype in (ttypes.Whitespace, ttypes.Comment):
-                continue
-            if ttypes.Keyword == token.ttype and token.value.upper() in set('ORDER', 'LIMIT'):
-                idx -= 1
+            if ttypes.Keyword == token.ttype and token.value.upper() in ('ORDER', 'LIMIT'):
                 break
-            self.having.append(token)
+            else:
+                idx += 1
+                self.having.append(token)
         return idx
 
     def on_GROUP(self, statement, idx):
@@ -228,9 +237,9 @@ class Translator(object):
                 else:
                     raise Exception('unexpected: %s' % repr(token))
             elif ttypes.Keyword == token.ttype:
-                if 'OR' == token.value:
+                if 'OR' == token.value.upper():
                     logic_op = 'OR'
-                elif 'AND' == token.value:
+                elif 'AND' == token.value.upper():
                     logic_op = 'AND'
                 else:
                     raise Exception('unexpected: %s' % repr(token))
@@ -252,27 +261,19 @@ class Translator(object):
             raise Exception('unexpected: %s' % repr(token))
 
     def has_function_projection(self):
-        for projection in self.projections:
+        for projection in self.projections.values():
             if isinstance(projection, stypes.Function):
                 return True
-            elif isinstance(projection, stypes.Identifier):
-                if isinstance(projection.tokens[0], stypes.Function):
-                    return True
         return False
 
     def analyze_projections_and_group_by(self):
         metrics = {}
-        for projection in self.projections:
-            if isinstance(projection, stypes.Identifier):
-                if projection.tokens[0].ttype in (ttypes.Name, ttypes.String.Symbol):
-                    if not self.group_by.get(projection.get_name()):
-                        raise Exception('unexpected: %s' % repr(projection))
-                elif isinstance(projection.tokens[0], stypes.Function):
-                    self.create_metric_aggregation(metrics, projection.tokens[0], projection.get_name())
-                else:
+        for projection_name, projection in self.projections.iteritems():
+            if projection.ttype in (ttypes.Name, ttypes.String.Symbol):
+                if not self.group_by.get(projection_name):
                     raise Exception('unexpected: %s' % repr(projection))
             elif isinstance(projection, stypes.Function):
-                self.create_metric_aggregation(metrics, projection, projection.get_name())
+                self.create_metric_aggregation(metrics, projection, projection_name)
             else:
                 raise Exception('unexpected: %s' % repr(projection))
         group_by_names = sorted(self.group_by.keys())
@@ -309,11 +310,26 @@ class Translator(object):
             if '@now' in token.value:
                 bucket_selector_agg['script']['inline'] = '%s%s' % (
                     bucket_selector_agg['script']['inline'], eval_numeric_value(token.value))
+            elif token.ttype == ttypes.Keyword and 'AND' == token.value.upper():
+                bucket_selector_agg['script']['inline'] = '%s%s' % (
+                    bucket_selector_agg['script']['inline'], '&&')
+            elif token.ttype == ttypes.Keyword and 'OR' == token.value.upper():
+                bucket_selector_agg['script']['inline'] = '%s%s' % (
+                    bucket_selector_agg['script']['inline'], '||')
             elif token.is_group():
                 self.process_having_agg(bucket_selector_agg, token.tokens)
             else:
                 if ttypes.Name == token.ttype:
-                    bucket_selector_agg['buckets_path'][token.value] = token.value
+                    variable_name = token.value
+                    projection = self.projections.get(variable_name)
+                    if not projection:
+                        raise Exception('having clause referenced variable must exist in select clause: %s' % variable_name)
+                    if isinstance(projection, stypes.Function) \
+                            and 'COUNT' == projection.tokens[0].get_name().upper() \
+                            and not projection.get_parameters():
+                        bucket_selector_agg['buckets_path'][variable_name] = '_count'
+                    else:
+                        bucket_selector_agg['buckets_path'][variable_name] = variable_name
                 bucket_selector_agg['script']['inline'] = '%s%s' % (
                     bucket_selector_agg['script']['inline'], token.value)
 
@@ -423,13 +439,18 @@ class Translator(object):
             self.records = []
             for hit in self.response['hits']['hits']:
                 record = {}
-                for projection in self.projections:
+                for projection_name, projection in self.projections.iteritems():
                     if projection.ttype == ttypes.Wildcard:
                         record = hit['_source']
+                    elif projection.ttype in (ttypes.String.Symbol, ttypes.Name):
+                        path = eval(projection.value) if projection.value.startswith('"') else projection.value
+                        if path in hit.keys():
+                            record[projection_name] = hit[path]
+                        else:
+                            record[projection_name] = self.get_object_member(
+                                hit['_source'], path.split('.'))
                     else:
-                        record[projection.get_name()] = self.get_object_member(
-                            hit['_source'],
-                            projection.get_real_name().split('.'))
+                        raise Exception('unexpected: %s' % repr(projection))
                 self.records.append(record)
         else:
             self.request['sort'] = []
