@@ -12,6 +12,7 @@ import time
 import json
 from sqlparse import tokens as ttypes
 from sqlparse import sql as stypes
+from sqlparse.ordereddict import OrderedDict
 import pprint
 
 ES_HOSTS = 'http://10.121.89.8/gsapi'
@@ -170,7 +171,7 @@ class Translator(object):
             idx += 1
             if token.ttype in (ttypes.Whitespace, ttypes.Comment):
                 continue
-            self.group_by = {}
+            self.group_by = OrderedDict()
             if isinstance(token, stypes.IdentifierList):
                 for id in token.get_identifiers():
                     if ttypes.Keyword == id.ttype:
@@ -284,7 +285,7 @@ class Translator(object):
                 self.create_metric_aggregation(metrics, projection, projection_name)
             else:
                 raise Exception('unexpected: %s' % repr(projection))
-        group_by_names = sorted(self.group_by.keys()) if self.group_by else []
+        group_by_names = list(reversed(self.group_by.keys())) if self.group_by else []
         if self.response:
             self.rows = []
             agg_response = dict(self.response.get('aggregations') or self.response)
