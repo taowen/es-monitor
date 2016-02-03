@@ -20,7 +20,7 @@ DEBUG = False
 
 
 def execute_sql(sql):
-    statement = sqlparse.parse(sql.strip().replace('》', '>').replace('《', '<').replace('；', ';'))[0]
+    statement = sqlparse.parse(sql.strip())[0]
     return SqlExecutor().execute(statement)
 
 
@@ -38,6 +38,7 @@ class SqlExecutor(object):
         self.projections = None
         self.group_by = None
         self.order_by = None
+        self.limit = None
         self.having = None
 
     def execute(self, statement):
@@ -68,9 +69,8 @@ class SqlExecutor(object):
             self.on_SELECT(statement.tokens)
             return self.rows
 
-
     def on_SELECT(self, tokens):
-        if not(ttypes.DML == tokens[0].ttype and 'SELECT' == tokens[0].value.upper()):
+        if not (ttypes.DML == tokens[0].ttype and 'SELECT' == tokens[0].value.upper()):
             raise Exception('it is not SELECT: %s' % tokens[0])
         idx = 1
         from_found = False
@@ -106,8 +106,15 @@ class SqlExecutor(object):
             else:
                 raise Exception('unexpected: %s' % repr(token))
         if self.is_eval():
+            if self.group_by or self.having or self.order_by or self.limit:
+                raise Exception('eval() is select only')
             if self.response:
                 self.execute_eval()
+        elif self.is_pivot():
+            if self.group_by or self.having or self.order_by or self.limit:
+                raise Exception('pivot() is select only')
+            if self.response:
+                self.execute_pivot()
         elif self.group_by or self.has_function_projection():
             self.request['size'] = 0
             self.analyze_projections_and_group_by()
@@ -140,6 +147,9 @@ class SqlExecutor(object):
                 break
             elif isinstance(token, stypes.Parenthesis):
                 self.select_from = sqlparse.parse(token.value[1:-1].strip())[0]
+            elif ttypes.Keyword == token.ttype and token.value.upper() in ('WHERE', 'HAVING', 'GROUP', 'ORDER', 'LIMIT'):
+                idx -=1
+                break
             else:
                 raise Exception('unexpected: %s' % repr(token))
         return idx
@@ -354,7 +364,8 @@ class SqlExecutor(object):
                     variable_name = token.value
                     projection = self.projections.get(variable_name)
                     if not projection:
-                        raise Exception('having clause referenced variable must exist in select clause: %s' % variable_name)
+                        raise Exception(
+                            'having clause referenced variable must exist in select clause: %s' % variable_name)
                     if isinstance(projection, stypes.Function) \
                             and 'COUNT' == projection.tokens[0].get_name().upper() \
                             and not projection.get_parameters():
@@ -501,8 +512,8 @@ class SqlExecutor(object):
 
     def is_eval(self):
         return len(self.projections) == 1 \
-                and isinstance(self.projections.values()[0], stypes.Function) \
-                and 'EVAL' == self.projections.values()[0].tokens[0].value.upper()
+               and isinstance(self.projections.values()[0], stypes.Function) \
+               and 'EVAL' == self.projections.values()[0].tokens[0].value.upper()
 
     def execute_eval(self):
         eval_func = self.projections.values()[0]
@@ -511,8 +522,16 @@ class SqlExecutor(object):
         self.rows = []
         for row in self.response:
             context = {'input': row, 'output': {}}
-            exec(compiled_source, {}, context)
+            exec (compiled_source, {}, context)
             self.rows.append(context['output'])
+
+    def is_pivot(self):
+        return len(self.projections) == 1 \
+               and isinstance(self.projections.values()[0], stypes.Function) \
+               and 'PIVOT' == self.projections.values()[0].tokens[0].value.upper()
+
+    def execute_pivot(self):
+        pass
 
 
 class CaseWhenTranslator(object):
