@@ -29,6 +29,10 @@ select per_minute, count(*) from gs_plutus_debug_
 select eval("output['errno']=input.get('errno')") from (
     select * from gs_plutus_debug limit 1)```
 
+## 注意
+
+由于 odin-agent 限制特殊字符 `>`, 因此我们使用中文`》` 
+
 TODO
 
 * ``` SELECT user, MAX(value) FROM (SELECT user, COUNT(*) AS value FROM index GROUP BY user)```
