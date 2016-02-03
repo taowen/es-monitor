@@ -258,7 +258,7 @@ class Translator(object):
         elif '=' == operator.value:
             right_operand = eval(token.right.value)
             return {'term': {token.left.get_name(): right_operand}}
-        elif 'LIKE' == operator.value.upper():
+        elif operator.value.upper() in ('LIKE', 'ILIKE'):
             right_operand = eval(token.right.value)
             return {'wildcard': {token.left.get_name(): right_operand.replace('%', '*').replace('_', '?')}}
         elif operator.value in ('!=', '<>'):

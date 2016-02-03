@@ -5,7 +5,7 @@ Created on 17/05/2012
 '''
 
 import re
-from collections import OrderedDict
+from ordereddict import OrderedDict
 
 
 class Cache(OrderedDict):
