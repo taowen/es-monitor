@@ -21,6 +21,10 @@ EOF
 * case when 表达 range aggregation ```select fp, count(*) from gs_plutus_debug_ where "timestamp">@now-15m group by (case when "timestamp" >= (@now-50s) and "timestamp" < (@now+50s) then 'future' when "timestamp" < (@now-50s) then 'now' end) as fp```
 * date_trunc 表达 date histogram aggregation ```select per_minute, count(*) from gs_plutus_debug_ where "timestamp">@now-5m group by to_char(date_trunc('minute', "timestamp"),'yyyy-MM-dd HH:mm:ss') as per_minute```
 
+## 注意
+
+由于 odin-agent 限制特殊字符 `>`, 因此我们使用中文`》` 
+
 TODO
 
 * ``` SELECT user, MAX(value) FROM (SELECT user, COUNT(*) AS value FROM index GROUP BY user)```
