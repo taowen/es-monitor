@@ -2,10 +2,10 @@
 
 第一个参数是 odin 曲线的名字
 
-第二个参数是 sql 比如
+第二个参数是 base64 编码的 sql 比如
 
 ```
-./es_monitor.py gs_plutus_debug.count "select count(*) as value from gs_plutus_debug where \"timestamp\" > @now-5m"
+./plugin.sh gs_plutus_debug.count c2VsZWN0IGNvdW50KCopIGFzIHZhbHVlIGZyb20gZ3NfcGx1dHVzX2RlYnVnIHdoZXJlICJ0aW1lc3RhbXAiID4gQG5vdy01bQ==
 ```
 
 在命令行上测试的时候也可以用stdin传sql参数，比如
@@ -28,10 +28,6 @@ select per_minute, count(*) from gs_plutus_debug_
 * 在sql后面对结果进行python脚本后处理 ```
 select eval("output['errno']=input.get('errno')") from (
     select * from gs_plutus_debug limit 1)```
-
-## 注意
-
-由于 odin-agent 限制特殊字符 `>`, 因此我们使用中文`》` 
 
 TODO
 
