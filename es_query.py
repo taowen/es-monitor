@@ -236,6 +236,8 @@ class Translator(object):
                     current_filter = {'bool': {'should': [current_filter, new_filter]}}
                 elif 'AND' == logic_op:
                     current_filter = {'bool': {'filter': [current_filter, new_filter]}}
+                elif 'NOT' == logic_op:
+                    current_filter = {'bool': {'must_not': new_filter}}
                 else:
                     raise Exception('unexpected: %s' % repr(token))
             elif ttypes.Keyword == token.ttype:
@@ -243,6 +245,8 @@ class Translator(object):
                     logic_op = 'OR'
                 elif 'AND' == token.value.upper():
                     logic_op = 'AND'
+                elif 'NOT' == token.value.upper():
+                    logic_op = 'NOT'
                 else:
                     raise Exception('unexpected: %s' % repr(token))
             else:
@@ -266,8 +270,13 @@ class Translator(object):
         elif operator.value in ('!=', '<>'):
             right_operand = eval(token.right.value)
             return {'not': {'term': {token.left.get_name(): right_operand}}}
+        elif 'IN' == operator.value.upper():
+            values = eval(token.right.value)
+            if not isinstance(values, tuple):
+                values = (values,)
+            return {'terms': {token.left.get_name(): values}}
         else:
-            raise Exception('unexpected: %s' % repr(token))
+            raise Exception('unexpected operator: %s' % operator.value)
 
     def has_function_projection(self):
         for projection in self.projections.values():

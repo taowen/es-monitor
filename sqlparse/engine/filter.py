@@ -111,11 +111,11 @@ class StatementFilter:
             stmt.tokens = stmt_tokens
             yield stmt
 
-class LikeFilter(object):
+class KeywordComparisonFilter(object):
     def process(self, stack, stream):
-        likes = ('LIKE', 'ILIK')
+        keywords = ('LIKE', 'ILIK', 'IN')
         for ttype, value in stream:
-            if ttype == T.Keyword and value.upper() in likes:
+            if ttype == T.Keyword and value.upper() in keywords:
                 yield T.Comparison, value
             else:
                 yield ttype, value
