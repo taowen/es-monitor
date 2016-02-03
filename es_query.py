@@ -20,35 +20,14 @@ DEBUG = False
 
 
 def execute_sql(sql):
-    statement = sqlparse.parse(sql.strip().replace('》', '>').replace('《', '<'))[0]
-    translator = Translator()
-    translator.on(statement)
-    if DEBUG:
-        print('=====')
-        pprint.pprint(translator.request)
-    url = ES_HOSTS + '/%s*/_search' % translator.index
-    try:
-        resp = urllib2.urlopen(url, json.dumps(translator.request)).read()
-    except urllib2.HTTPError as e:
-        sys.stderr.write(e.read())
-        return
-    except:
-        import traceback
-
-        sys.stderr.write(traceback.format_exc())
-        return
-    translator.response = json.loads(resp)
-    if DEBUG:
-        print('=====')
-        pprint.pprint(translator.response)
-    translator.on(statement)
-    return translator.rows
+    statement = sqlparse.parse(sql.strip().replace('》', '>').replace('《', '<').replace('；', ';'))[0]
+    return SqlExecutor().execute(statement)
 
 
-class Translator(object):
+class SqlExecutor(object):
     def __init__(self):
         # output of request stage
-        self.index = None
+        self.select_from = None
         self.request = {}
         # input of response stage
         self.response = None
@@ -61,33 +40,61 @@ class Translator(object):
         self.order_by = None
         self.having = None
 
-    def on(self, statement):
-        getattr(self, 'on_%s' % statement.get_type())(statement)
+    def execute(self, statement):
+        self.on_SELECT(statement.tokens)
+        if DEBUG:
+            print('=====')
+            pprint.pprint(self.request)
+        if isinstance(self.select_from, stypes.Statement):
+            self.response = SqlExecutor().execute(self.select_from)
+            self.on_SELECT(statement.tokens)
+            return self.rows
+        else:
+            url = ES_HOSTS + '/%s*/_search' % self.select_from
+            try:
+                resp = urllib2.urlopen(url, json.dumps(self.request)).read()
+            except urllib2.HTTPError as e:
+                sys.stderr.write(e.read())
+                return
+            except:
+                import traceback
 
-    def on_SELECT(self, statement):
+                sys.stderr.write(traceback.format_exc())
+                return
+            self.response = json.loads(resp)
+            if DEBUG:
+                print('=====')
+                pprint.pprint(self.response)
+            self.on_SELECT(statement.tokens)
+            return self.rows
+
+
+    def on_SELECT(self, tokens):
+        if not(ttypes.DML == tokens[0].ttype and 'SELECT' == tokens[0].value.upper()):
+            raise Exception('it is not SELECT: %s' % tokens[0])
         idx = 1
         from_found = False
-        while idx < len(statement.tokens):
-            token = statement.tokens[idx]
+        while idx < len(tokens):
+            token = tokens[idx]
             idx += 1
             if token.ttype in (ttypes.Whitespace, ttypes.Comment):
                 continue
             if ttypes.Keyword == token.ttype:
                 if 'FROM' == token.value.upper():
                     from_found = True
-                    idx = self.on_FROM(statement, idx)
+                    idx = self.on_FROM(tokens, idx)
                     continue
                 elif 'GROUP' == token.value.upper():
-                    idx = self.on_GROUP(statement, idx)
+                    idx = self.on_GROUP(tokens, idx)
                     continue
                 elif 'ORDER' == token.value.upper():
-                    idx = self.on_ORDER(statement, idx)
+                    idx = self.on_ORDER(tokens, idx)
                     continue
                 elif 'LIMIT' == token.value.upper():
-                    idx = self.on_LIMIT(statement, idx)
+                    idx = self.on_LIMIT(tokens, idx)
                     continue
                 elif 'HAVING' == token.value.upper():
-                    idx = self.on_HAVING(statement, idx)
+                    idx = self.on_HAVING(tokens, idx)
                     continue
                 else:
                     raise Exception('unexpected: %s' % repr(token))
@@ -98,7 +105,10 @@ class Translator(object):
                 continue
             else:
                 raise Exception('unexpected: %s' % repr(token))
-        if self.group_by or self.has_function_projection():
+        if self.is_eval():
+            if self.response:
+                self.execute_eval()
+        elif self.group_by or self.has_function_projection():
             self.request['size'] = 0
             self.analyze_projections_and_group_by()
         else:
@@ -119,22 +129,24 @@ class Translator(object):
             else:
                 self.projections[id.value] = id
 
-    def on_FROM(self, statement, idx):
-        while idx < len(statement.tokens):
-            token = statement.tokens[idx]
+    def on_FROM(self, tokens, idx):
+        while idx < len(tokens):
+            token = tokens[idx]
             idx += 1
             if token.ttype in (ttypes.Whitespace, ttypes.Comment):
                 continue
             if isinstance(token, stypes.Identifier):
-                self.index = token.get_name()
+                self.select_from = token.get_name()
                 break
+            elif isinstance(token, stypes.Parenthesis):
+                self.select_from = sqlparse.parse(token.value[1:-1].strip())[0]
             else:
                 raise Exception('unexpected: %s' % repr(token))
         return idx
 
-    def on_LIMIT(self, statement, idx):
-        while idx < len(statement.tokens):
-            token = statement.tokens[idx]
+    def on_LIMIT(self, tokens, idx):
+        while idx < len(tokens):
+            token = tokens[idx]
             idx += 1
             if token.ttype in (ttypes.Whitespace, ttypes.Comment):
                 continue
@@ -142,10 +154,10 @@ class Translator(object):
             break
         return idx
 
-    def on_HAVING(self, statement, idx):
+    def on_HAVING(self, tokens, idx):
         self.having = []
-        while idx < len(statement.tokens):
-            token = statement.tokens[idx]
+        while idx < len(tokens):
+            token = tokens[idx]
             if ttypes.Keyword == token.ttype and token.value.upper() in ('ORDER', 'LIMIT'):
                 break
             else:
@@ -153,21 +165,21 @@ class Translator(object):
                 self.having.append(token)
         return idx
 
-    def on_GROUP(self, statement, idx):
-        while idx < len(statement.tokens):
-            token = statement.tokens[idx]
+    def on_GROUP(self, tokens, idx):
+        while idx < len(tokens):
+            token = tokens[idx]
             idx += 1
             if token.ttype in (ttypes.Whitespace, ttypes.Comment):
                 continue
             if ttypes.Keyword == token.ttype:
                 if 'BY' == token.value.upper():
-                    return self.on_GROUP_BY(statement, idx)
+                    return self.on_GROUP_BY(tokens, idx)
             else:
                 raise Exception('unexpected: %s' % repr(token))
 
-    def on_GROUP_BY(self, statement, idx):
-        while idx < len(statement.tokens):
-            token = statement.tokens[idx]
+    def on_GROUP_BY(self, tokens, idx):
+        while idx < len(tokens):
+            token = tokens[idx]
             idx += 1
             if token.ttype in (ttypes.Whitespace, ttypes.Comment):
                 continue
@@ -186,21 +198,21 @@ class Translator(object):
                 raise Exception('unexpected: %s' % repr(token))
             return idx
 
-    def on_ORDER(self, statement, idx):
-        while idx < len(statement.tokens):
-            token = statement.tokens[idx]
+    def on_ORDER(self, tokens, idx):
+        while idx < len(tokens):
+            token = tokens[idx]
             idx += 1
             if token.ttype in (ttypes.Whitespace, ttypes.Comment):
                 continue
             if ttypes.Keyword == token.ttype:
                 if 'BY' == token.value.upper():
-                    return self.on_ORDER_BY(statement, idx)
+                    return self.on_ORDER_BY(tokens, idx)
             else:
                 raise Exception('unexpected: %s' % repr(token))
 
-    def on_ORDER_BY(self, statement, idx):
-        while idx < len(statement.tokens):
-            token = statement.tokens[idx]
+    def on_ORDER_BY(self, tokens, idx):
+        while idx < len(tokens):
+            token = tokens[idx]
             idx += 1
             if token.ttype in (ttypes.Whitespace, ttypes.Comment):
                 continue
@@ -486,6 +498,21 @@ class Translator(object):
             return obj.get(paths[0])
         else:
             return self.get_object_member(obj.get(paths[0]), paths[1:])
+
+    def is_eval(self):
+        return len(self.projections) == 1 \
+                and isinstance(self.projections.values()[0], stypes.Function) \
+                and 'EVAL' == self.projections.values()[0].tokens[0].value.upper()
+
+    def execute_eval(self):
+        eval_func = self.projections.values()[0]
+        source = eval(eval_func.get_parameters()[0].value)
+        compiled_source = compile(source, '', 'exec')
+        self.rows = []
+        for row in self.response:
+            context = {'input': row, 'output': {}}
+            exec(compiled_source, {}, context)
+            self.rows.append(context['output'])
 
 
 class CaseWhenTranslator(object):
