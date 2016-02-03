@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
 
 """
 Query elasticsearch using SQL
@@ -11,6 +12,7 @@ import time
 import json
 from sqlparse import tokens as ttypes
 from sqlparse import sql as stypes
+from sqlparse.ordereddict import OrderedDict
 import pprint
 
 ES_HOSTS = 'http://10.121.89.8/gsapi'
@@ -18,7 +20,7 @@ DEBUG = False
 
 
 def execute_sql(sql):
-    statement = sqlparse.parse(sql.strip())[0]
+    statement = sqlparse.parse(sql.strip().replace('》', '>').replace('《', '<'))[0]
     translator = Translator()
     translator.on(statement)
     if DEBUG:
@@ -40,7 +42,7 @@ def execute_sql(sql):
         print('=====')
         pprint.pprint(translator.response)
     translator.on(statement)
-    return translator.records
+    return translator.rows
 
 
 class Translator(object):
@@ -51,7 +53,7 @@ class Translator(object):
         # input of response stage
         self.response = None
         # output of response stage
-        self.records = None
+        self.rows = None
 
         # internal state
         self.projections = None
@@ -169,7 +171,7 @@ class Translator(object):
             idx += 1
             if token.ttype in (ttypes.Whitespace, ttypes.Comment):
                 continue
-            self.group_by = {}
+            self.group_by = OrderedDict()
             if isinstance(token, stypes.IdentifierList):
                 for id in token.get_identifiers():
                     if ttypes.Keyword == id.ttype:
@@ -283,9 +285,9 @@ class Translator(object):
                 self.create_metric_aggregation(metrics, projection, projection_name)
             else:
                 raise Exception('unexpected: %s' % repr(projection))
-        group_by_names = sorted(self.group_by.keys()) if self.group_by else []
+        group_by_names = list(reversed(self.group_by.keys())) if self.group_by else []
         if self.response:
-            self.records = []
+            self.rows = []
             agg_response = dict(self.response.get('aggregations') or self.response)
             agg_response.update(self.response)
             self.collect_records(agg_response, list(reversed(group_by_names)), metrics, {})
@@ -403,7 +405,7 @@ class Translator(object):
             record = props
             for metric_name, get_metric in metrics.iteritems():
                 record[metric_name] = get_metric(parent_bucket)
-            self.records.append(record)
+            self.rows.append(record)
 
     def create_metric_aggregation(self, metrics, sql_function, metric_name):
         if not isinstance(sql_function, stypes.Function):
@@ -444,7 +446,7 @@ class Translator(object):
 
     def analyze_non_aggregation(self):
         if self.response:
-            self.records = []
+            self.rows = []
             for hit in self.response['hits']['hits']:
                 record = {}
                 for projection_name, projection in self.projections.iteritems():
@@ -459,7 +461,7 @@ class Translator(object):
                                 hit['_source'], path.split('.'))
                     else:
                         raise Exception('unexpected: %s' % repr(projection))
-                self.records.append(record)
+                self.rows.append(record)
         else:
             self.request['sort'] = []
             for id in self.order_by or []:
@@ -595,8 +597,8 @@ def eval_timedelta(str):
 if __name__ == "__main__":
     DEBUG = True
     sql = sys.stdin.read()
-    records = execute_sql(sql)
+    rows = execute_sql(sql)
     print('=====')
-    for record in records:
-        print json.dumps(record)
-    sys.exit(0 if records else 1)
+    for row in rows:
+        print json.dumps(row)
+    sys.exit(0 if rows else 1)
