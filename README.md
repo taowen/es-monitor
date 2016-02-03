@@ -20,6 +20,9 @@ EOF
 * ```@now`` 表示当前时间，可以加减s,m,h,d
 * case when 表达 range aggregation ```select fp, count(*) from gs_plutus_debug_ where "timestamp">@now-15m group by (case when "timestamp" >= (@now-50s) and "timestamp" < (@now+50s) then 'future' when "timestamp" < (@now-50s) then 'now' end) as fp```
 * date_trunc 表达 date histogram aggregation ```select per_minute, count(*) from gs_plutus_debug_ where "timestamp">@now-5m group by to_char(date_trunc('minute', "timestamp"),'yyyy-MM-dd HH:mm:ss') as per_minute```
+* 在sql后面对结果进行python脚本后处理 ```cat << EOF | ./es_query.py
+     select eval("output['errno']=input.get('errno')") from (select * from gs_plutus_debug limit 1)
+     EOF```
 
 TODO
 
