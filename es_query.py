@@ -283,7 +283,7 @@ class Translator(object):
                 self.create_metric_aggregation(metrics, projection, projection_name)
             else:
                 raise Exception('unexpected: %s' % repr(projection))
-        group_by_names = sorted(self.group_by.keys())
+        group_by_names = sorted(self.group_by.keys()) if self.group_by else []
         if self.response:
             self.records = []
             agg_response = dict(self.response.get('aggregations') or self.response)
