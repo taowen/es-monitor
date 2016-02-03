@@ -531,7 +531,20 @@ class SqlExecutor(object):
                and 'PIVOT' == self.projections.values()[0].tokens[0].value.upper()
 
     def execute_pivot(self):
-        pass
+        pivot_func = self.projections.values()[0]
+        params = list(pivot_func.get_parameters())
+        pivot_columns = [id.get_name() for id in params[:-1]]
+        value_column = params[-1].get_name()
+        groups = {}
+        for row in self.response:
+            pivot_to = []
+            for pivot_column in pivot_columns:
+                pivot_to.append('%s_%s' % (pivot_column, row.pop(pivot_column, None)))
+            value = row.pop(value_column, None)
+            group_key = tuple(sorted(dict(row).items()))
+            groups[group_key] = groups.get(group_key, row)
+            groups[group_key]['_'.join(pivot_to)] = value
+        self.rows = groups.values()
 
 
 class CaseWhenTranslator(object):
