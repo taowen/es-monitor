@@ -110,3 +110,12 @@ class StatementFilter:
         if stmt is not None:
             stmt.tokens = stmt_tokens
             yield stmt
+
+class LikeFilter(object):
+    def process(self, stack, stream):
+        likes = ('LIKE', 'ILIK')
+        for ttype, value in stream:
+            if ttype == T.Keyword and value.upper() in likes:
+                yield T.Comparison, value
+            else:
+                yield ttype, value

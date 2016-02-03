@@ -8,6 +8,7 @@
 from sqlparse import lexer
 from sqlparse.engine import grouping
 from sqlparse.engine.filter import StatementFilter
+from sqlparse.engine.filter import LikeFilter
 
 # XXX remove this when cleanup is complete
 Filter = object
@@ -34,6 +35,7 @@ class FilterStack(object):
         self._grouping = True
 
     def full_analyze(self):
+        self.preprocess.append(LikeFilter())
         self.enable_grouping()
 
     def run(self, sql, encoding=None):

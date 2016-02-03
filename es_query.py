@@ -258,6 +258,9 @@ class Translator(object):
         elif '=' == operator.value:
             right_operand = eval(token.right.value)
             return {'term': {token.left.get_name(): right_operand}}
+        elif 'LIKE' == operator.value.upper():
+            right_operand = eval(token.right.value)
+            return {'wildcard': {token.left.get_name(): right_operand.replace('%', '*').replace('_', '?')}}
         elif operator.value in ('!=', '<>'):
             right_operand = eval(token.right.value)
             return {'not': {'term': {token.left.get_name(): right_operand}}}
@@ -275,7 +278,7 @@ class Translator(object):
         for projection_name, projection in self.projections.iteritems():
             if projection.ttype in (ttypes.Name, ttypes.String.Symbol):
                 if not self.group_by.get(projection_name):
-                    raise Exception('unexpected: %s' % repr(projection))
+                    raise Exception('selected field not in group by: %s' % projection_name)
             elif isinstance(projection, stypes.Function):
                 self.create_metric_aggregation(metrics, projection, projection_name)
             else:
