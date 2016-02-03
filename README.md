@@ -28,6 +28,14 @@ select per_minute, count(*) from gs_plutus_debug_
 * 在sql后面对结果进行python脚本后处理 ```
 select eval("output['errno']=input.get('errno')") from (
     select * from gs_plutus_debug limit 1)```
+* 行变列 ```
+select pivot(errno, value) from (
+    select errno, count(*) as value from gs_plutus_debug where "timestamp" > @now-5m group by errno)``` 是把这样的输出 ```
+{"errno": 0, "value": 234171}
+{"errno": 97, "value": 76}
+``` 变成这样 ```
+{"errno_0": 234171, "errno_97": 76}
+```
 
 TODO
 
