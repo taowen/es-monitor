@@ -14,8 +14,10 @@ if __name__ == "__main__":
     sql = sys.argv[2]
     rows = es_query.execute_sql(sql)
     ts = int(time.time())
+    datapoints = []
     for datapoint in rows:
         datapoint['name'] = metric_name
         datapoint['timestamp'] = ts
-        print json.dumps(datapoint)
+        datapoints.append(datapoint)
+    print json.dumps(datapoints)
     sys.exit(0 if rows else 1)
