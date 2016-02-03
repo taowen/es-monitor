@@ -12,10 +12,10 @@ import time
 if __name__ == "__main__":
     metric_name = sys.argv[1]
     sql = sys.argv[2]
-    records = es_query.execute_sql(sql)
+    rows = es_query.execute_sql(sql)
     ts = int(time.time())
-    for datapoint in records:
+    for datapoint in rows:
         datapoint['name'] = metric_name
         datapoint['timestamp'] = ts
         print json.dumps(datapoint)
-    sys.exit(0 if records else 1)
+    sys.exit(0 if rows else 1)
