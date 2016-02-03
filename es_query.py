@@ -256,7 +256,11 @@ class Translator(object):
         elif '<' == operator.value:
             return {'range': {token.left.get_name(): {'to': eval_numeric_value(str(token.right))}}}
         elif '=' == operator.value:
-            return {'term': {token.left.get_name(): eval(token.right.value)}}
+            right_operand = eval(token.right.value)
+            return {'term': {token.left.get_name(): right_operand}}
+        elif operator.value in ('!=', '<>'):
+            right_operand = eval(token.right.value)
+            return {'not': {'term': {token.left.get_name(): right_operand}}}
         else:
             raise Exception('unexpected: %s' % repr(token))
 
@@ -289,9 +293,10 @@ class Translator(object):
         current_aggs = {'aggs': {}}
         if metrics:
             current_aggs = {'aggs': metrics}
-        bucket_selector_agg = {'buckets_path': {}, 'script': {'lang': 'expression', 'inline': ''}}
-        self.process_having_agg(bucket_selector_agg, self.having)
-        current_aggs['aggs']['having'] = {'bucket_selector': bucket_selector_agg}
+        if self.having:
+            bucket_selector_agg = {'buckets_path': {}, 'script': {'lang': 'expression', 'inline': ''}}
+            self.process_having_agg(bucket_selector_agg, self.having)
+            current_aggs['aggs']['having'] = {'bucket_selector': bucket_selector_agg}
         for group_by_name in group_by_names:
             group_by = self.group_by.get(group_by_name)
             if group_by.tokens[0].ttype in (ttypes.Name, ttypes.String.Symbol):

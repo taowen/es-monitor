@@ -23,8 +23,6 @@ EOF
 
 TODO
 
-* count(*) & having
-* and & having
 * ``` SELECT user, MAX(value) FROM (SELECT user, COUNT(*) AS value FROM index GROUP BY user)```
 * aggregation & sort & limit
 * client side join
