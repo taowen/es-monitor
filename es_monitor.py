@@ -41,7 +41,10 @@ if __name__ == "__main__":
     for row in rows or []:
         datapoint = {'value': row.pop('value', 0)}
         if row:
-            datapoint['tags'] = {to_str(k): to_str(v) for k, v in row.iteritems()}
+            tags = {}
+            for k, v in row.iteritems():
+                tags[to_str(k)] = to_str(v)
+            datapoint['tags'] = tags
         datapoint['name'] = metric_name
         datapoint['timestamp'] = ts
         datapoints.append(datapoint)

@@ -1,1 +1,1 @@
-python es_monitor.py "$@"
+python2.6 es_monitor.py "$@"
