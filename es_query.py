@@ -150,7 +150,7 @@ class SqlExecutor(object):
             elif isinstance(token, stypes.Parenthesis):
                 self.select_from = sqlparse.parse(token.value[1:-1].strip())[0]
             elif ttypes.Keyword == token.ttype and token.value.upper() in (
-            'WHERE', 'HAVING', 'GROUP', 'ORDER', 'LIMIT'):
+                    'WHERE', 'HAVING', 'GROUP', 'ORDER', 'LIMIT'):
                 idx -= 1
                 break
             else:
@@ -163,7 +163,7 @@ class SqlExecutor(object):
             idx += 1
             if token.ttype in (ttypes.Whitespace, ttypes.Comment):
                 continue
-            self.request['size'] = int(token.value)
+            self.limit = int(token.value)
             break
         return idx
 
@@ -334,6 +334,19 @@ class SqlExecutor(object):
             self.collect_records(agg_response, list(reversed(group_by_names)), metrics, {})
         else:
             self.add_aggs_to_request(group_by_names, metrics)
+        if self.order_by or self.limit:
+            if len(self.group_by) != 1:
+                raise Exception('order by can only be applied on single group by')
+            aggs = self.request['aggs'][group_by_names[0]]
+            agg_names = set(aggs.keys()) - set(['aggs'])
+            if len(agg_names) != 1:
+                raise Exception('order by can only be applied on single group by')
+            agg_type = list(agg_names)[0]
+            agg = aggs[agg_type]
+            if self.order_by:
+                agg['order'] = self.create_sort((group_by_names[0], agg_type))
+            if self.limit:
+                agg['size'] = self.limit
 
     def add_aggs_to_request(self, group_by_names, metrics):
         current_aggs = {'aggs': {}}
@@ -379,9 +392,7 @@ class SqlExecutor(object):
                     if not projection:
                         raise Exception(
                             'having clause referenced variable must exist in select clause: %s' % variable_name)
-                    if isinstance(projection, stypes.Function) \
-                            and 'COUNT' == projection.tokens[0].get_name().upper() \
-                            and not projection.get_parameters():
+                    if is_count_star(projection):
                         bucket_selector_agg['buckets_path'][variable_name] = '_count'
                     else:
                         bucket_selector_agg['buckets_path'][variable_name] = variable_name
@@ -515,12 +526,30 @@ class SqlExecutor(object):
                         raise Exception('unexpected: %s' % repr(projection))
                 self.rows.append(record)
         else:
-            self.request['sort'] = []
-            for id in self.order_by or []:
-                asc_or_desc = 'asc'
-                if 'DESC' == id.tokens[-1].value.upper():
-                    asc_or_desc = 'desc'
-                self.request['sort'].append({id.get_name(): asc_or_desc})
+            if self.order_by:
+                self.request['sort'] = self.create_sort()
+            if token.value:
+                self.request['size'] = self.limit
+
+    def create_sort(self, agg=None):
+        sort = []
+        for id in self.order_by or []:
+            asc_or_desc = 'asc'
+            if 'DESC' == id.tokens[-1].value.upper():
+                asc_or_desc = 'desc'
+            projection = self.projections.get(id.get_name())
+            if not projection:
+                raise Exception('can only sort on selected field: %s' % id.get_name())
+            if is_count_star(projection):
+                sort.append({'_count': asc_or_desc})
+            elif agg and id.get_name() == agg[0]:
+                if 'terms' == agg[1]:
+                    sort.append({'_term': asc_or_desc})
+                else:
+                    sort.append({'_key': asc_or_desc})
+            else:
+                sort.append({id.get_name(): asc_or_desc})
+        return sort
 
     def get_object_member(self, obj, paths):
         if obj is None:
@@ -638,6 +667,12 @@ class CaseWhenTranslator(object):
     def build(self):
         if not self.field or not self.ranges:
             raise Exception('internal error')
+
+
+def is_count_star(projection):
+    return isinstance(projection, stypes.Function) \
+           and 'COUNT' == projection.tokens[0].get_name().upper() \
+           and not projection.get_parameters()
 
 
 def skip_whitespace(tokens, idx):
