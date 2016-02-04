@@ -1,17 +1,19 @@
 ## 插件说明
 
-第一个参数是 odin 曲线的名字
-
-第二个参数是 base64 编码的 sql 比如
-
 ```
-./plugin.sh gs_plutus_debug.count c2VsZWN0IGNvdW50KCopIGFzIHZhbHVlIGZyb20gZ3NfcGx1dHVzX2RlYnVnIHdoZXJlICJ0aW1lc3RhbXAiID4gQG5vdy01bQ==
+./plugin.sh https://url-to-params
 ```
+
+从 url 处下载的文件内容：
+
+* 第一行参数是 elasticsearch 服务器地址
+* 第二行参数是 曲线的名字
+* 其余行参数是 sql
 
 在命令行上测试的时候也可以用stdin传sql参数，比如
 
 ```
-cat << EOF | python es_query.py
+cat << EOF | python es_query.py http://es_hosts
 SELECT "user", "oid", max("@timestamp") as value FROM gs_api_track_ GROUP BY "user", "oid" WHERE "@timestamp" > 1454239084000
 EOF
 ```
