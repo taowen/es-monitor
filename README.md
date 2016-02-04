@@ -41,8 +41,7 @@ select fp, count(*) from gs_plutus_debug_
 * case when 表达 filters aggregation （支持else，任意表达式） ```
 select status, count(*) as value from gs_plutus_debug
     group by (case when status='200' then 'success' else 'failure' end) as status
-    where "timestamp">@now-5h and name='getEstimatePrice'
-```
+    where "timestamp">@now-5h and name='getEstimatePrice'```
 * date_trunc 表达 date histogram aggregation ```
 select per_minute, count(*) from gs_plutus_debug_
     where "timestamp">@now-5m group by to_char(date_trunc('minute', "timestamp"),'yyyy-MM-dd HH:mm:ss') as per_minute```
