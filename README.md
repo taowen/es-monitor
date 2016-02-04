@@ -34,10 +34,15 @@ EOF
 ## 特殊语法
 
 * ```@now`` 表示当前时间，可以加减s,m,h,d
-* case when 表达 range aggregation ```
+* case when 表达 range aggregation（不支持else，只支持>=和<） ```
 select fp, count(*) from gs_plutus_debug_
     where "timestamp">@now-15m group by (case when "timestamp" >= (@now-50s) and "timestamp" < (@now+50s) then 'future'
     when "timestamp" < (@now-50s) then 'now' end) as fp```
+* case when 表达 filters aggregation （支持else，任意表达式） ```
+select status, count(*) as value from gs_plutus_debug
+    group by (case when status='200' then 'success' else 'failure' end) as status
+    where "timestamp">@now-5h and name='getEstimatePrice'
+```
 * date_trunc 表达 date histogram aggregation ```
 select per_minute, count(*) from gs_plutus_debug_
     where "timestamp">@now-5m group by to_char(date_trunc('minute', "timestamp"),'yyyy-MM-dd HH:mm:ss') as per_minute```
@@ -56,7 +61,5 @@ select pivot(errno, value) from (
 TODO
 
 * histogram aggregation
-* case when implemented as filters aggregation
 * ``` SELECT user, MAX(value) FROM (SELECT user, COUNT(*) AS value FROM index GROUP BY user)```
-* aggregation & sort & limit
 * client side join
