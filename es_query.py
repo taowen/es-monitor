@@ -38,6 +38,7 @@ class SqlExecutor(object):
 
         # internal state
         self.sql_select = None
+        self.include_bucket_in_row = False
 
     @property
     def projections(self):
@@ -67,16 +68,17 @@ class SqlExecutor(object):
     def select_from(self):
         return self.sql_select.select_from
 
-    def execute(self, statement):
+    def execute(self, statement, inner_aggs=None):
+        inner_aggs = inner_aggs or {}
         self.on_SELECT(statement.tokens)
+        outter_aggs = self.request['aggs']
+        for group_by_name in self.group_by.keys():
+            outter_aggs = outter_aggs[group_by_name]['aggs']
+        outter_aggs.update(inner_aggs)
         if DEBUG:
             print('=====')
             print(json.dumps(self.request, indent=2))
-        if isinstance(self.select_from, stypes.Statement):
-            self.response = SqlExecutor().execute(self.select_from)
-            self.on_SELECT(statement.tokens)
-            return self.rows
-        else:
+        if isinstance(self.select_from, basestring):
             url = ES_HOSTS + '/%s*/_search' % self.select_from
             try:
                 resp = urllib2.urlopen(url, json.dumps(self.request)).read()
@@ -94,6 +96,19 @@ class SqlExecutor(object):
                 print(json.dumps(self.response, indent=2))
             self.on_SELECT(statement.tokens)
             return self.rows
+        else:
+            if in_mem_computation.is_in_mem_computation(self.sql_select):
+                self.response = SqlExecutor().execute(self.select_from)
+                self.on_SELECT(statement.tokens)
+                return self.rows
+            else:
+                inner_executor = SqlExecutor()
+                inner_executor.include_bucket_in_row = True
+                inner_rows = inner_executor.execute(self.select_from, self.request['aggs'])
+                self.response = inner_rows
+                self.on_SELECT(statement.tokens)
+                return self.rows
+
 
     def on_SELECT(self, tokens):
         if not self.sql_select:
@@ -126,26 +141,32 @@ class SqlExecutor(object):
                 self.create_metric_aggregation(metrics, projection, projection_name)
             else:
                 raise Exception('unexpected: %s' % repr(projection))
-        group_by_names = list(reversed(self.group_by.keys())) if self.group_by else []
+        reversed_group_by_names = list(reversed(self.group_by.keys())) if self.group_by else []
+        group_by_names = self.group_by.keys() if self.group_by else []
         if self.response:
             self.rows = []
-            agg_response = self.response['aggregations']
-            if not group_by_names:
-                agg_response = agg_response['_global_']
-            self.collect_records(agg_response, list(reversed(group_by_names)), metrics, {})
+            if isinstance(self.response, list):
+                for inner_row in self.response:
+                    bucket = inner_row.pop('_bucket_')
+                    self.collect_records(bucket, group_by_names, metrics, inner_row)
+            else:
+                agg_response = self.response['aggregations']
+                if not group_by_names:
+                    agg_response = agg_response['_global_']
+                self.collect_records(agg_response, group_by_names, metrics, {})
         else:
-            self.add_aggs_to_request(group_by_names, metrics)
+            self.add_aggs_to_request(reversed_group_by_names, metrics)
         if self.order_by or self.limit:
             if len(self.group_by) != 1:
                 raise Exception('order by can only be applied on single group by')
-            aggs = self.request['aggs'][group_by_names[0]]
+            aggs = self.request['aggs'][reversed_group_by_names[0]]
             agg_names = set(aggs.keys()) - set(['aggs'])
             if len(agg_names) != 1:
                 raise Exception('order by can only be applied on single group by')
             agg_type = list(agg_names)[0]
             agg = aggs[agg_type]
             if self.order_by:
-                agg['order'] = self.create_sort((group_by_names[0], agg_type))
+                agg['order'] = self.create_sort((reversed_group_by_names[0], agg_type))
             if self.limit:
                 agg['size'] = self.limit
 
@@ -254,24 +275,26 @@ class SqlExecutor(object):
             raise Exception('unexpected: %s' % repr(tokens[0]))
         return current_aggs
 
-    def collect_records(self, parent_bucket, terms_bucket_fields, metrics, props):
-        if terms_bucket_fields:
-            current_response = parent_bucket[terms_bucket_fields[0]]
+    def collect_records(self, parent_bucket, group_by_names, metrics, props):
+        if group_by_names:
+            current_response = parent_bucket[group_by_names[0]]
             child_buckets = current_response['buckets']
             if isinstance(child_buckets, dict):
                 for child_bucket_key, child_bucket in child_buckets.iteritems():
-                    child_props = dict(props, **{terms_bucket_fields[0]: child_bucket_key})
-                    self.collect_records(child_bucket, terms_bucket_fields[1:], metrics, child_props)
+                    child_props = dict(props, **{group_by_names[0]: child_bucket_key})
+                    self.collect_records(child_bucket, group_by_names[1:], metrics, child_props)
             else:
                 for child_bucket in child_buckets:
                     child_bucket_key = child_bucket['key_as_string'] if 'key_as_string' in child_bucket else \
                         child_bucket['key']
-                    child_props = dict(props, **{terms_bucket_fields[0]: child_bucket_key})
-                    self.collect_records(child_bucket, terms_bucket_fields[1:], metrics, child_props)
+                    child_props = dict(props, **{group_by_names[0]: child_bucket_key})
+                    self.collect_records(child_bucket, group_by_names[1:], metrics, child_props)
         else:
             record = props
             for metric_name, get_metric in metrics.iteritems():
                 record[metric_name] = get_metric(parent_bucket)
+            if self.include_bucket_in_row:
+                record['_bucket_'] = parent_bucket
             self.rows.append(record)
 
     def create_metric_aggregation(self, metrics, sql_function, metric_name):
