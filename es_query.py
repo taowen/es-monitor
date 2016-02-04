@@ -149,8 +149,9 @@ class SqlExecutor(object):
                 break
             elif isinstance(token, stypes.Parenthesis):
                 self.select_from = sqlparse.parse(token.value[1:-1].strip())[0]
-            elif ttypes.Keyword == token.ttype and token.value.upper() in ('WHERE', 'HAVING', 'GROUP', 'ORDER', 'LIMIT'):
-                idx -=1
+            elif ttypes.Keyword == token.ttype and token.value.upper() in (
+            'WHERE', 'HAVING', 'GROUP', 'ORDER', 'LIMIT'):
+                idx -= 1
                 break
             else:
                 raise Exception('unexpected: %s' % repr(token))
@@ -321,8 +322,9 @@ class SqlExecutor(object):
         group_by_names = list(reversed(self.group_by.keys())) if self.group_by else []
         if self.response:
             self.rows = []
-            agg_response = dict(self.response.get('aggregations') or self.response)
-            agg_response.update(self.response)
+            agg_response = self.response['aggregations']
+            if not group_by_names:
+                agg_response = agg_response['_global_']
             self.collect_records(agg_response, list(reversed(group_by_names)), metrics, {})
         else:
             self.add_aggs_to_request(group_by_names, metrics)
@@ -335,17 +337,20 @@ class SqlExecutor(object):
             bucket_selector_agg = {'buckets_path': {}, 'script': {'lang': 'expression', 'inline': ''}}
             self.process_having_agg(bucket_selector_agg, self.having)
             current_aggs['aggs']['having'] = {'bucket_selector': bucket_selector_agg}
-        for group_by_name in group_by_names:
-            group_by = self.group_by.get(group_by_name)
-            if group_by.tokens[0].ttype in (ttypes.Name, ttypes.String.Symbol):
-                current_aggs = self.append_terms_agg(current_aggs, group_by_name)
-            else:
-                if isinstance(group_by.tokens[0], stypes.Parenthesis):
-                    current_aggs = self.append_range_agg(current_aggs, group_by, group_by_name)
-                elif isinstance(group_by.tokens[0], stypes.Function):
-                    current_aggs = self.append_date_histogram_agg(current_aggs, group_by, group_by_name)
+        if group_by_names:
+            for group_by_name in group_by_names:
+                group_by = self.group_by.get(group_by_name)
+                if group_by.tokens[0].ttype in (ttypes.Name, ttypes.String.Symbol):
+                    current_aggs = self.append_terms_agg(current_aggs, group_by_name)
                 else:
-                    raise Exception('unexpected: %s' % repr(group_by.tokens[0]))
+                    if isinstance(group_by.tokens[0], stypes.Parenthesis):
+                        current_aggs = self.append_range_agg(current_aggs, group_by, group_by_name)
+                    elif isinstance(group_by.tokens[0], stypes.Function):
+                        current_aggs = self.append_date_histogram_agg(current_aggs, group_by, group_by_name)
+                    else:
+                        raise Exception('unexpected: %s' % repr(group_by.tokens[0]))
+        else:
+            current_aggs = self.append_global_agg(current_aggs)
         self.request.update(current_aggs)
 
     def process_having_agg(self, bucket_selector_agg, tokens):
@@ -411,6 +416,14 @@ class SqlExecutor(object):
             raise Exception('unexpected: %s' % repr(sql_function))
         return current_aggs
 
+    def append_global_agg(self, current_aggs):
+        current_aggs = {
+            'aggs': {'_global_': dict(current_aggs, **{
+                'filter': self.request.get('query') or {}
+            })}
+        }
+        return current_aggs
+
     def append_range_agg(self, current_aggs, group_by, group_by_name):
         tokens = group_by.tokens[0].tokens[1:-1]
         if len(tokens) == 1 and isinstance(tokens[0], stypes.Case):
@@ -465,8 +478,7 @@ class SqlExecutor(object):
                             'value_count': {'field': params[0].get_name()}}})
             else:
                 if self.response:
-                    metrics[metric_name] = lambda bucket: bucket['hits']['total'] if 'hits' in bucket else bucket[
-                        'doc_count']
+                    metrics[metric_name] = lambda bucket: bucket['doc_count']
         elif sql_function_name in ('MAX', 'MIN', 'AVG', 'SUM'):
             if len(sql_function.get_parameters()) != 1:
                 raise Exception('unexpected: %s' % repr(sql_function))
