@@ -72,8 +72,12 @@ class SqlExecutor(object):
         inner_aggs = inner_aggs or {}
         self.on_SELECT(statement.tokens)
         outter_aggs = self.request['aggs']
-        for group_by_name in self.group_by.keys():
-            outter_aggs = outter_aggs[group_by_name]['aggs']
+        if self.group_by:
+            for group_by_name in self.group_by.keys():
+                outter_aggs = outter_aggs[group_by_name]['aggs']
+        else:
+            if '_global_' in outter_aggs:
+                outter_aggs = outter_aggs['_global_']['aggs']
         outter_aggs.update(inner_aggs)
         if DEBUG:
             print('=====')
@@ -148,6 +152,8 @@ class SqlExecutor(object):
             if isinstance(self.response, list):
                 for inner_row in self.response:
                     bucket = inner_row.pop('_bucket_')
+                    if not group_by_names:
+                        bucket = bucket['_global_']
                     self.collect_records(bucket, group_by_names, metrics, inner_row)
             else:
                 agg_response = self.response['aggregations']
@@ -157,7 +163,7 @@ class SqlExecutor(object):
         else:
             self.add_aggs_to_request(reversed_group_by_names, metrics)
         if self.order_by or self.limit:
-            if len(self.group_by) != 1:
+            if len(self.group_by or {}) != 1:
                 raise Exception('order by can only be applied on single group by')
             aggs = self.request['aggs'][reversed_group_by_names[0]]
             agg_names = set(aggs.keys()) - set(['aggs'])

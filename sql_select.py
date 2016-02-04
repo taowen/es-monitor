@@ -77,9 +77,6 @@ class SqlSelect(object):
                 break
             elif isinstance(token, stypes.Parenthesis):
                 self.select_from = sqlparse.parse(token.value[1:-1].strip())[0]
-            elif ttypes.Keyword == token.ttype and token.value.upper() in (
-                    'WHERE', 'HAVING', 'GROUP', 'ORDER', 'LIMIT'):
-                idx -= 1
                 break
             else:
                 raise Exception('unexpected: %s' % repr(token))
