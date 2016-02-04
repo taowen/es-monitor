@@ -271,6 +271,8 @@ class SqlExecutor(object):
                 elif 'AND' == token.value.upper():
                     logic_op = 'AND'
                 elif 'NOT' == token.value.upper():
+                    if logic_op:
+                        raise Exception('unexpected: NOT')
                     logic_op = 'NOT'
                 else:
                     raise Exception('unexpected: %s' % repr(token))
@@ -300,6 +302,10 @@ class SqlExecutor(object):
             if not isinstance(values, tuple):
                 values = (values,)
             return {'terms': {token.left.get_name(): values}}
+        elif 'IS' == operator.value.upper():
+            if 'NULL' != token.right.value.upper():
+                raise Exception('unexpected: %s' % repr(token.right))
+            return {'bool': {'must_not': {'exists': {'field': token.left.get_name()}}}}
         else:
             raise Exception('unexpected operator: %s' % operator.value)
 
