@@ -15,6 +15,7 @@ from sqlparse import sql as stypes
 from sqlparse.ordereddict import OrderedDict
 import json
 from sql_select import SqlSelect
+import in_mem_computation
 
 DEBUG = False
 
@@ -101,16 +102,9 @@ class SqlExecutor(object):
             self.sql_select.on_SELECT(tokens)
         if self.where and not self.response:
             self.request['query'] = create_compound_filter(self.where.tokens[1:])
-        if self.is_eval():
-            if self.group_by or self.having or self.order_by or self.limit:
-                raise Exception('eval() is select only')
+        if in_mem_computation.is_in_mem_computation(self.sql_select):
             if self.response:
-                self.execute_eval()
-        elif self.is_pivot():
-            if self.group_by or self.having or self.order_by or self.limit:
-                raise Exception('pivot() is select only')
-            if self.response:
-                self.execute_pivot()
+                self.rows = in_mem_computation.do_in_mem_computation(self.sql_select, self.response)
         elif self.group_by or self.has_function_projection():
             self.request['size'] = 0
             self.analyze_projections_and_group_by()
@@ -279,7 +273,7 @@ class SqlExecutor(object):
             else:
                 for child_bucket in child_buckets:
                     child_bucket_key = child_bucket['key_as_string'] if 'key_as_string' in child_bucket else \
-                    child_bucket['key']
+                        child_bucket['key']
                     child_props = dict(props, **{terms_bucket_fields[0]: child_bucket_key})
                     self.collect_records(child_bucket, terms_bucket_fields[1:], metrics, child_props)
         else:
@@ -375,42 +369,6 @@ class SqlExecutor(object):
             return obj.get(paths[0])
         else:
             return self.get_object_member(obj.get(paths[0]), paths[1:])
-
-    def is_eval(self):
-        return len(self.projections) == 1 \
-               and isinstance(self.projections.values()[0], stypes.Function) \
-               and 'EVAL' == self.projections.values()[0].tokens[0].value.upper()
-
-    def execute_eval(self):
-        eval_func = self.projections.values()[0]
-        source = eval(eval_func.get_parameters()[0].value)
-        compiled_source = compile(source, '', 'exec')
-        self.rows = []
-        for row in self.response:
-            context = {'input': row, 'output': {}}
-            exec (compiled_source, {}, context)
-            self.rows.append(context['output'])
-
-    def is_pivot(self):
-        return len(self.projections) == 1 \
-               and isinstance(self.projections.values()[0], stypes.Function) \
-               and 'PIVOT' == self.projections.values()[0].tokens[0].value.upper()
-
-    def execute_pivot(self):
-        pivot_func = self.projections.values()[0]
-        params = list(pivot_func.get_parameters())
-        pivot_columns = [id.get_name() for id in params[:-1]]
-        value_column = params[-1].get_name()
-        groups = {}
-        for row in self.response:
-            pivot_to = []
-            for pivot_column in pivot_columns:
-                pivot_to.append('%s_%s' % (pivot_column, row.pop(pivot_column, None)))
-            value = row.pop(value_column, None)
-            group_key = tuple(sorted(dict(row).items()))
-            groups[group_key] = groups.get(group_key, row)
-            groups[group_key]['_'.join(pivot_to)] = value
-        self.rows = groups.values()
 
 
 class CaseWhenNumericRangeTranslator(object):
