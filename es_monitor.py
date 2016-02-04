@@ -60,4 +60,3 @@ if __name__ == "__main__":
             datapoint['timestamp'] = ts
             datapoints.append(datapoint)
     print json.dumps(datapoints)
-    sys.exit(0 if rows else 1)

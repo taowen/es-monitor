@@ -55,6 +55,8 @@ select pivot(errno, value) from (
 
 TODO
 
+* histogram aggregation
+* case when implemented as filters aggregation
 * ``` SELECT user, MAX(value) FROM (SELECT user, COUNT(*) AS value FROM index GROUP BY user)```
 * aggregation & sort & limit
 * client side join
