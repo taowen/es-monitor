@@ -7,8 +7,22 @@
 从 url 处下载的文件内容：
 
 * 第一行参数是 elasticsearch 服务器地址
-* 第二行参数是 曲线的名字
-* 其余行参数是 sql
+* 后面是 sql
+* sql 后面是 >>> 曲线名称
+
+比如
+
+```
+http://es_hosts
+
+select count(*) as value from gs_plutus_debug
+where "timestamp" > @now-5m
+>>> gs_plutus_debug.count
+
+select count(*) as value from gs_api_track
+where "@timestamp" > @now-5m
+>>> gs_api_track.count
+```
 
 在命令行上测试的时候也可以用stdin传sql参数，比如
 
