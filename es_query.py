@@ -237,77 +237,7 @@ class SqlExecutor(object):
 
     def on_WHERE(self, where):
         if not self.response:
-            self.request['query'] = self.create_compound_filter(where.tokens[1:])
-
-    def create_compound_filter(self, tokens):
-        idx = 0
-        current_filter = None
-        logic_op = None
-        while idx < len(tokens):
-            token = tokens[idx]
-            idx += 1
-            if token.ttype in (ttypes.Whitespace, ttypes.Comment):
-                continue
-            if isinstance(token, stypes.Comparison) or isinstance(token, stypes.Parenthesis):
-                if isinstance(token, stypes.Comparison):
-                    new_filter = self.create_comparision_filter(token)
-                elif isinstance(token, stypes.Parenthesis):
-                    new_filter = self.create_compound_filter(token.tokens[1:-1])
-                else:
-                    raise Exception('unexpected: %s' % repr(token))
-                if not logic_op and not current_filter:
-                    current_filter = new_filter
-                elif 'OR' == logic_op:
-                    current_filter = {'bool': {'should': [current_filter, new_filter]}}
-                elif 'AND' == logic_op:
-                    current_filter = {'bool': {'filter': [current_filter, new_filter]}}
-                elif 'NOT' == logic_op:
-                    current_filter = {'bool': {'must_not': new_filter}}
-                else:
-                    raise Exception('unexpected: %s' % repr(token))
-            elif ttypes.Keyword == token.ttype:
-                if 'OR' == token.value.upper():
-                    logic_op = 'OR'
-                elif 'AND' == token.value.upper():
-                    logic_op = 'AND'
-                elif 'NOT' == token.value.upper():
-                    if logic_op:
-                        raise Exception('unexpected: NOT')
-                    logic_op = 'NOT'
-                else:
-                    raise Exception('unexpected: %s' % repr(token))
-            else:
-                raise Exception('unexpected: %s' % repr(token))
-        return current_filter
-
-    def create_comparision_filter(self, token):
-        if not isinstance(token, stypes.Comparison):
-            raise Exception('unexpected: %s' % repr(token))
-        operator = token.token_next_by_type(0, ttypes.Comparison)
-        if '>' == operator.value:
-            return {'range': {token.left.get_name(): {'from': eval_numeric_value(str(token.right))}}}
-        elif '<' == operator.value:
-            return {'range': {token.left.get_name(): {'to': eval_numeric_value(str(token.right))}}}
-        elif '=' == operator.value:
-            right_operand = eval(token.right.value)
-            return {'term': {token.left.get_name(): right_operand}}
-        elif operator.value.upper() in ('LIKE', 'ILIKE'):
-            right_operand = eval(token.right.value)
-            return {'wildcard': {token.left.get_name(): right_operand.replace('%', '*').replace('_', '?')}}
-        elif operator.value in ('!=', '<>'):
-            right_operand = eval(token.right.value)
-            return {'not': {'term': {token.left.get_name(): right_operand}}}
-        elif 'IN' == operator.value.upper():
-            values = eval(token.right.value)
-            if not isinstance(values, tuple):
-                values = (values,)
-            return {'terms': {token.left.get_name(): values}}
-        elif 'IS' == operator.value.upper():
-            if 'NULL' != token.right.value.upper():
-                raise Exception('unexpected: %s' % repr(token.right))
-            return {'bool': {'must_not': {'exists': {'field': token.left.get_name()}}}}
-        else:
-            raise Exception('unexpected operator: %s' % operator.value)
+            self.request['query'] = create_compound_filter(where.tokens[1:])
 
     def has_function_projection(self):
         for projection in self.projections.values():
@@ -444,14 +374,17 @@ class SqlExecutor(object):
     def append_range_agg(self, current_aggs, group_by, group_by_name):
         tokens = group_by.tokens[0].tokens[1:-1]
         if len(tokens) == 1 and isinstance(tokens[0], stypes.Case):
-            case_when_translator = CaseWhenTranslator()
-            case_when_translator.on_CASE(tokens[0].tokens[1:])
+            case_when = tokens[0]
+            case_when_translator = CaseWhenNumericRangeTranslator()
+            try:
+                case_when_aggs = case_when_translator.on_CASE(case_when.tokens[1:])
+            except:
+                if DEBUG:
+                    print('not numeric: %s' % case_when)
+                case_when_translator = CaseWhenFiltersTranslator()
+                case_when_aggs = case_when_translator.on_CASE(case_when.tokens[1:])
             current_aggs = {
-                'aggs': {group_by_name: dict(current_aggs, **{
-                    'range': {
-                        'field': case_when_translator.field,
-                        'ranges': case_when_translator.ranges}
-                })}
+                'aggs': {group_by_name: dict(current_aggs, **case_when_aggs)}
             }
         else:
             raise Exception('unexpected: %s' % repr(tokens[0]))
@@ -460,11 +393,16 @@ class SqlExecutor(object):
     def collect_records(self, parent_bucket, terms_bucket_fields, metrics, props):
         if terms_bucket_fields:
             current_response = parent_bucket[terms_bucket_fields[0]]
-            for child_bucket in current_response['buckets']:
-                child_bucket_key = child_bucket['key_as_string'] if 'key_as_string' in child_bucket else child_bucket[
-                    'key']
-                child_props = dict(props, **{terms_bucket_fields[0]: child_bucket_key})
-                self.collect_records(child_bucket, terms_bucket_fields[1:], metrics, child_props)
+            child_buckets = current_response['buckets']
+            if isinstance(child_buckets, dict):
+                for child_bucket_key, child_bucket in child_buckets.iteritems():
+                    child_props = dict(props, **{terms_bucket_fields[0]: child_bucket_key})
+                    self.collect_records(child_bucket, terms_bucket_fields[1:], metrics, child_props)
+            else:
+                for child_bucket in child_buckets:
+                    child_bucket_key = child_bucket['key_as_string'] if 'key_as_string' in child_bucket else child_bucket['key']
+                    child_props = dict(props, **{terms_bucket_fields[0]: child_bucket_key})
+                    self.collect_records(child_bucket, terms_bucket_fields[1:], metrics, child_props)
         else:
             record = props
             for metric_name, get_metric in metrics.iteritems():
@@ -596,7 +534,7 @@ class SqlExecutor(object):
         self.rows = groups.values()
 
 
-class CaseWhenTranslator(object):
+class CaseWhenNumericRangeTranslator(object):
     def __init__(self):
         self.ranges = []
         self.field = None
@@ -667,6 +605,152 @@ class CaseWhenTranslator(object):
     def build(self):
         if not self.field or not self.ranges:
             raise Exception('internal error')
+        return {
+            'range': {
+                'field': self.field,
+                'ranges': self.ranges
+            }
+        }
+
+
+class CaseWhenFiltersTranslator(object):
+    def __init__(self):
+        self.filters = {}
+        self.other_bucket_key = None
+
+    def on_CASE(self, tokens):
+        idx = 0
+        while idx < len(tokens):
+            token = tokens[idx]
+            idx += 1
+            if token.ttype in (ttypes.Whitespace, ttypes.Comment):
+                continue
+            if 'WHEN' == token.value.upper():
+                idx = self.on_WHEN(tokens, idx)
+            elif 'ELSE' == token.value.upper():
+                idx = self.on_ELSE(tokens, idx)
+            elif 'END' == token.value.upper():
+                break
+            else:
+                raise Exception('unexpected: %s' % repr(token))
+        return self.build()
+
+    def on_WHEN(self, tokens, idx):
+        filter_tokens = []
+        bucket_key = None
+        while idx < len(tokens):
+            token = tokens[idx]
+            idx += 1
+            if token.ttype in (ttypes.Whitespace, ttypes.Comment):
+                continue
+            if ttypes.Keyword == token.ttype and 'THEN' == token.value.upper():
+                idx = skip_whitespace(tokens, idx + 1)
+                bucket_key = eval(tokens[idx].value)
+                idx += 1
+                break
+            filter_tokens.append(token)
+        if not filter_tokens:
+            raise Exception('case when can not have empty filter')
+        self.filters[bucket_key] = create_compound_filter(filter_tokens)
+        return idx
+
+    def on_ELSE(self, tokens, idx):
+        idx = skip_whitespace(tokens, idx + 1)
+        self.other_bucket_key = eval(tokens[idx].value)
+        idx += 1
+        return idx
+
+    def set_field(self, field):
+        if self.field is None:
+            self.field = field
+        elif self.field != field:
+            raise Exception('can only case when on single field: %s %s' % (self.field, field))
+        else:
+            self.field = field
+
+    def build(self):
+        if not self.filters:
+            raise Exception('internal error')
+        agg = {'filters': {'filters': self.filters}}
+        if self.other_bucket_key:
+            agg['filters']['other_bucket_key'] = self.other_bucket_key
+        return agg
+
+
+def create_compound_filter(tokens):
+    idx = 0
+    current_filter = None
+    logic_op = None
+    while idx < len(tokens):
+        token = tokens[idx]
+        idx += 1
+        if token.ttype in (ttypes.Whitespace, ttypes.Comment):
+            continue
+        if isinstance(token, stypes.Comparison) or isinstance(token, stypes.Parenthesis):
+            if isinstance(token, stypes.Comparison):
+                new_filter = create_comparision_filter(token)
+            elif isinstance(token, stypes.Parenthesis):
+                new_filter = create_compound_filter(token.tokens[1:-1])
+            else:
+                raise Exception('unexpected: %s' % repr(token))
+            if not logic_op and not current_filter:
+                current_filter = new_filter
+            elif 'OR' == logic_op:
+                current_filter = {'bool': {'should': [current_filter, new_filter]}}
+            elif 'AND' == logic_op:
+                current_filter = {'bool': {'filter': [current_filter, new_filter]}}
+            elif 'NOT' == logic_op:
+                current_filter = {'bool': {'must_not': new_filter}}
+            else:
+                raise Exception('unexpected: %s' % repr(token))
+        elif ttypes.Keyword == token.ttype:
+            if 'OR' == token.value.upper():
+                logic_op = 'OR'
+            elif 'AND' == token.value.upper():
+                logic_op = 'AND'
+            elif 'NOT' == token.value.upper():
+                if logic_op:
+                    raise Exception('unexpected: NOT')
+                logic_op = 'NOT'
+            else:
+                raise Exception('unexpected: %s' % repr(token))
+        else:
+            raise Exception('unexpected: %s' % repr(token))
+    return current_filter
+
+
+def create_comparision_filter(token):
+    if not isinstance(token, stypes.Comparison):
+        raise Exception('unexpected: %s' % repr(token))
+    operator = token.token_next_by_type(0, ttypes.Comparison)
+    if '>' == operator.value:
+        return {'range': {token.left.get_name(): {'gt': eval_numeric_value(str(token.right))}}}
+    elif '>=' == operator.value:
+        return {'range': {token.left.get_name(): {'gte': eval_numeric_value(str(token.right))}}}
+    elif '<' == operator.value:
+        return {'range': {token.left.get_name(): {'lt': eval_numeric_value(str(token.right))}}}
+    elif '<=' == operator.value:
+        return {'range': {token.left.get_name(): {'lte': eval_numeric_value(str(token.right))}}}
+    elif '=' == operator.value:
+        right_operand = eval(token.right.value)
+        return {'term': {token.left.get_name(): right_operand}}
+    elif operator.value.upper() in ('LIKE', 'ILIKE'):
+        right_operand = eval(token.right.value)
+        return {'wildcard': {token.left.get_name(): right_operand.replace('%', '*').replace('_', '?')}}
+    elif operator.value in ('!=', '<>'):
+        right_operand = eval(token.right.value)
+        return {'not': {'term': {token.left.get_name(): right_operand}}}
+    elif 'IN' == operator.value.upper():
+        values = eval(token.right.value)
+        if not isinstance(values, tuple):
+            values = (values,)
+        return {'terms': {token.left.get_name(): values}}
+    elif 'IS' == operator.value.upper():
+        if 'NULL' != token.right.value.upper():
+            raise Exception('unexpected: %s' % repr(token.right))
+        return {'bool': {'must_not': {'exists': {'field': token.left.get_name()}}}}
+    else:
+        raise Exception('unexpected operator: %s' % operator.value)
 
 
 def is_count_star(projection):
