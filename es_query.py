@@ -360,7 +360,7 @@ class SqlExecutor(object):
         else:
             if self.order_by:
                 self.request['sort'] = self.create_sort()
-            if token.value:
+            if self.limit:
                 self.request['size'] = self.limit
 
     def create_sort(self, agg=None):

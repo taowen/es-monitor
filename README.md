@@ -31,7 +31,7 @@ cat << EOF | python es_query.py http://es_hosts
 SELECT "user", "oid", max("@timestamp") as value FROM gs_api_track_ GROUP BY "user", "oid" WHERE "@timestamp" > 1454239084000
 EOF
 ```
-## 特殊语法
+## 计算后再聚合
 
 * ```@now`` 表示当前时间，可以加减s,m,h,d
 * case when 表达 range aggregation（不支持else，只支持>=和<） ```
@@ -45,7 +45,32 @@ select status, count(*) as value from gs_plutus_debug
 * date_trunc 表达 date histogram aggregation ```
 select per_minute, count(*) from gs_plutus_debug_
     where "timestamp">@now-5m group by to_char(date_trunc('minute', "timestamp"),'yyyy-MM-dd HH:mm:ss') as per_minute```
-* 在sql后面对结果进行python脚本后处理 ```
+
+## 聚合后二次计算
+
+* 普通的SQL子查询聚合越聚合越少，但是Elasticsearch的嵌套聚合是越聚合越多。上一层从下一层的结果里进一步
+group by（或者过滤）是表示对数据的进一步细分，从语义上来说和SQL是相反的。```
+select count(*) as sub_count from (
+    select count(*) as total_count from gs_api_track where "@timestamp" > @now-10s
+    group by date_trunc('second', "@timestamp") as ts) where "order.district"='010'``` 返回的结果类似这样 ```
+{"total_count": 13, "sub_count": 1, "ts": "2016-02-05T00:16:16.000+08:00"}
+{"total_count": 7, "sub_count": 5, "ts": "2016-02-05T00:16:17.000+08:00"}
+{"total_count": 0, "sub_count": 0, "ts": "2016-02-05T00:16:18.000+08:00"}
+{"total_count": 0, "sub_count": 0, "ts": "2016-02-05T00:16:19.000+08:00"}
+{"total_count": 0, "sub_count": 0, "ts": "2016-02-05T00:16:20.000+08:00"}
+{"total_count": 88, "sub_count": 17, "ts": "2016-02-05T00:16:21.000+08:00"}
+{"total_count": 9, "sub_count": 2, "ts": "2016-02-05T00:16:22.000+08:00"}
+{"total_count": 5, "sub_count": 1, "ts": "2016-02-05T00:16:23.000+08:00"}
+{"total_count": 4, "sub_count": 1, "ts": "2016-02-05T00:16:24.000+08:00"}```
+* 支持 Having 对聚合的结果进行二次过滤 ```
+select count(*) as total_count from gs_api_track
+    where "@timestamp" > @now-10s group by date_trunc('second', "@timestamp") as ts
+    having total_count>10
+```
+
+## 用python进行后处理
+
+* 在sql后面对结果进行python脚本后处理（逐行） ```
 select eval("output['errno']=input.get('errno')") from (
     select * from gs_plutus_debug limit 1)```
 * 行变列 ```
@@ -59,6 +84,8 @@ select pivot(errno, value) from (
 
 TODO
 
+* support cross layer having
+* support bucket script
 * histogram aggregation
 * ``` SELECT user, MAX(value) FROM (SELECT user, COUNT(*) AS value FROM index GROUP BY user)```
 * client side join
