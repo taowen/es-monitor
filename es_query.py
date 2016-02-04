@@ -13,13 +13,15 @@ import json
 from sqlparse import tokens as ttypes
 from sqlparse import sql as stypes
 from sqlparse.ordereddict import OrderedDict
-import pprint
+import json
 
-ES_HOSTS = 'http://10.121.89.8/gsapi'
 DEBUG = False
 
 
-def execute_sql(sql):
+def execute_sql(es_hosts, sql):
+    global ES_HOSTS
+
+    ES_HOSTS = es_hosts
     statement = sqlparse.parse(sql.strip())[0]
     return SqlExecutor().execute(statement)
 
@@ -45,7 +47,7 @@ class SqlExecutor(object):
         self.on_SELECT(statement.tokens)
         if DEBUG:
             print('=====')
-            pprint.pprint(self.request)
+            print(json.dumps(self.request, indent=2))
         if isinstance(self.select_from, stypes.Statement):
             self.response = SqlExecutor().execute(self.select_from)
             self.on_SELECT(statement.tokens)
@@ -65,7 +67,7 @@ class SqlExecutor(object):
             self.response = json.loads(resp)
             if DEBUG:
                 print('=====')
-                pprint.pprint(self.response)
+                print(json.dumps(self.response, indent=2))
             self.on_SELECT(statement.tokens)
             return self.rows
 
@@ -665,7 +667,7 @@ def eval_timedelta(str):
 if __name__ == "__main__":
     DEBUG = True
     sql = sys.stdin.read()
-    rows = execute_sql(sql)
+    rows = execute_sql(sys.argv[1], sql)
     print('=====')
     for row in rows:
         print json.dumps(row)
