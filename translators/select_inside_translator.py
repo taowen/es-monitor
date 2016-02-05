@@ -178,21 +178,21 @@ class Translator(object):
 
     def select_non_aggregation_response(self, response):
         rows = []
-        for hit in response['hits']['hits']:
-            record = {}
+        for input in response['hits']['hits']:
+            row = {}
             for projection_name, projection in self.sql_select.projections.iteritems():
                 if projection.ttype == ttypes.Wildcard:
-                    record = hit['_source']
+                    row = input['_source']
                 elif projection.ttype in (ttypes.String.Symbol, ttypes.Name):
                     path = eval(projection.value) if projection.value.startswith('"') else projection.value
-                    if path in hit.keys():
-                        record[projection_name] = hit[path]
+                    if path in input.keys():
+                        row[projection_name] = input[path]
                     else:
-                        record[projection_name] = get_object_member(
-                            hit['_source'], path.split('.'))
+                        row[projection_name] = get_object_member(
+                            input['_source'], path.split('.'))
                 else:
                     raise Exception('unexpected: %s' % repr(projection))
-            rows.append(record)
+            rows.append(row)
         return rows
 
     def create_sort(self, agg=None):

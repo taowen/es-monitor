@@ -34,6 +34,12 @@ def execute_sql_select(es_hosts, sql_select, inner_aggs=None):
         if sql_select.group_by:
             for group_by_name in sql_select.group_by.keys():
                 outter_aggs = outter_aggs[group_by_name]['aggs']
+        for k in inner_aggs.keys():
+            if k in outter_aggs:
+                if 'having' == k:
+                    raise Exception('having and nested can only have one')
+                else:
+                    raise Exception('aggregation %s conflicted' % k)
         outter_aggs.update(inner_aggs)
     if DEBUG:
         print('=====')
