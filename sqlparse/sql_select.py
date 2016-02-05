@@ -78,7 +78,8 @@ class SqlSelect(object):
                 self.select_from = token.get_name()
                 break
             elif isinstance(token, stypes.Parenthesis):
-                self.select_from = sqlparse.parse(token.value[1:-1].strip())[0]
+                self.select_from = SqlSelect()
+                self.select_from.on_SELECT(sqlparse.parse(token.value[1:-1].strip())[0])
                 break
             else:
                 raise Exception('unexpected: %s' % repr(token))

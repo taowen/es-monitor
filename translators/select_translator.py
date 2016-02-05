@@ -21,9 +21,7 @@ class Translator(object):
             self.build_non_aggregation_request()
 
     def __call__(self, response):
-        if in_mem_computation.is_in_mem_computation(self.sql_select):
-            return in_mem_computation.do_in_mem_computation(self.sql_select, response)
-        elif self.is_aggregation():
+        if self.is_aggregation():
             return self.select_aggregation_response(response)
         else:
             return self.select_non_aggregation_response(response)
