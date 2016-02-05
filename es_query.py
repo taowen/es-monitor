@@ -39,6 +39,16 @@ class SqlExecutor(object):
         # internal state
         self.sql_select = sql_select
         self.include_bucket_in_row = False
+        self.metric_request = {}
+        self.metric_selector = {}
+        for projection_name, projection in self.sql_select.projections.iteritems():
+            if projection.ttype in (ttypes.Name, ttypes.String.Symbol):
+                if not self.sql_select.group_by.get(projection_name):
+                    raise Exception('selected field not in group by: %s' % projection_name)
+            elif isinstance(projection, stypes.Function):
+                self.create_metric_aggregation(projection, projection_name)
+            else:
+                raise Exception('unexpected: %s' % repr(projection))
 
     @classmethod
     def create(cls, tokens):
@@ -118,15 +128,6 @@ class SqlExecutor(object):
         return False
 
     def analyze_projections_and_group_by(self):
-        metrics = {}
-        for projection_name, projection in self.sql_select.projections.iteritems():
-            if projection.ttype in (ttypes.Name, ttypes.String.Symbol):
-                if not self.sql_select.group_by.get(projection_name):
-                    raise Exception('selected field not in group by: %s' % projection_name)
-            elif isinstance(projection, stypes.Function):
-                self.create_metric_aggregation(metrics, projection, projection_name)
-            else:
-                raise Exception('unexpected: %s' % repr(projection))
         reversed_group_by_names = list(reversed(self.sql_select.group_by.keys())) if self.sql_select.group_by else []
         group_by_names = self.sql_select.group_by.keys() if self.sql_select.group_by else []
         if self.response:
@@ -136,14 +137,14 @@ class SqlExecutor(object):
                     bucket = inner_row.pop('_bucket_')
                     if not group_by_names:
                         bucket = bucket['_global_']
-                    self.collect_records(bucket, group_by_names, metrics, inner_row)
+                    self.collect_records(bucket, group_by_names, inner_row)
             else:
                 agg_response = self.response['aggregations']
                 if not group_by_names:
                     agg_response = agg_response['_global_']
-                self.collect_records(agg_response, group_by_names, metrics, {})
+                self.collect_records(agg_response, group_by_names, {})
         else:
-            self.add_aggs_to_request(reversed_group_by_names, metrics)
+            self.add_aggs_to_request(reversed_group_by_names)
         if self.sql_select.order_by or self.sql_select.limit:
             if len(self.sql_select.group_by or {}) != 1:
                 raise Exception('order by can only be applied on single group by')
@@ -158,10 +159,10 @@ class SqlExecutor(object):
             if self.sql_select.limit:
                 agg['size'] = self.sql_select.limit
 
-    def add_aggs_to_request(self, group_by_names, metrics):
+    def add_aggs_to_request(self, group_by_names):
         current_aggs = {'aggs': {}}
-        if metrics:
-            current_aggs = {'aggs': metrics}
+        if self.metric_request:
+            current_aggs = {'aggs': self.metric_request}
         if self.sql_select.having:
             bucket_selector_agg = {'buckets_path': {}, 'script': {'lang': 'expression', 'inline': ''}}
             self.process_having_agg(bucket_selector_agg, self.sql_select.having)
@@ -263,29 +264,29 @@ class SqlExecutor(object):
             raise Exception('unexpected: %s' % repr(tokens[0]))
         return current_aggs
 
-    def collect_records(self, parent_bucket, group_by_names, metrics, props):
+    def collect_records(self, parent_bucket, group_by_names, props):
         if group_by_names:
             current_response = parent_bucket[group_by_names[0]]
             child_buckets = current_response['buckets']
             if isinstance(child_buckets, dict):
                 for child_bucket_key, child_bucket in child_buckets.iteritems():
                     child_props = dict(props, **{group_by_names[0]: child_bucket_key})
-                    self.collect_records(child_bucket, group_by_names[1:], metrics, child_props)
+                    self.collect_records(child_bucket, group_by_names[1:], child_props)
             else:
                 for child_bucket in child_buckets:
                     child_bucket_key = child_bucket['key_as_string'] if 'key_as_string' in child_bucket else \
                         child_bucket['key']
                     child_props = dict(props, **{group_by_names[0]: child_bucket_key})
-                    self.collect_records(child_bucket, group_by_names[1:], metrics, child_props)
+                    self.collect_records(child_bucket, group_by_names[1:], child_props)
         else:
             record = props
-            for metric_name, get_metric in metrics.iteritems():
+            for metric_name, get_metric in self.metric_selector.iteritems():
                 record[metric_name] = get_metric(parent_bucket)
             if self.include_bucket_in_row:
                 record['_bucket_'] = parent_bucket
             self.rows.append(record)
 
-    def create_metric_aggregation(self, metrics, sql_function, metric_name):
+    def create_metric_aggregation(self, sql_function, metric_name):
         if not isinstance(sql_function, stypes.Function):
             raise Exception('unexpected: %s' % repr(sql_function))
         sql_function_name = sql_function.tokens[0].get_name().upper()
@@ -293,31 +294,26 @@ class SqlExecutor(object):
             params = list(sql_function.get_parameters())
             if params:
                 count_keyword = sql_function.tokens[1].token_next_by_type(0, ttypes.Keyword)
-                if self.response:
-                    metrics[metric_name] = lambda bucket: bucket[metric_name]['value']
-                else:
-                    if count_keyword:
-                        if 'DISTINCT' == count_keyword.value.upper():
-                            metrics.update({metric_name: {
-                                'cardinality': {
-                                    'field': params[0].get_name()
-                                }}})
-                        else:
-                            raise Exception('unexpected: %s' % repr(count_keyword))
+                self.metric_selector[metric_name] = lambda bucket: bucket[metric_name]['value']
+                if count_keyword:
+                    if 'DISTINCT' == count_keyword.value.upper():
+                        self.metric_request[metric_name] = {
+                            'cardinality': {
+                                'field': params[0].get_name()
+                            }}
                     else:
-                        metrics.update({metric_name: {
-                            'value_count': {'field': params[0].get_name()}}})
+                        raise Exception('unexpected: %s' % repr(count_keyword))
+                else:
+                    self.metric_request[metric_name] = {
+                        'value_count': {'field': params[0].get_name()}}
             else:
-                if self.response:
-                    metrics[metric_name] = lambda bucket: bucket['doc_count']
+                self.metric_selector[metric_name] = lambda bucket: bucket['doc_count']
         elif sql_function_name in ('MAX', 'MIN', 'AVG', 'SUM'):
             if len(sql_function.get_parameters()) != 1:
                 raise Exception('unexpected: %s' % repr(sql_function))
-            if self.response:
-                metrics[metric_name] = lambda bucket: bucket[metric_name]['value']
-            else:
-                metrics.update({metric_name: {
-                    sql_function_name.lower(): {'field': sql_function.get_parameters()[0].get_name()}}})
+            self.metric_selector[metric_name] = lambda bucket: bucket[metric_name]['value']
+            self.metric_request[metric_name] = {
+                sql_function_name.lower(): {'field': sql_function.get_parameters()[0].get_name()}}
         else:
             raise Exception('unsupported function: %s' % repr(sql_function))
 
