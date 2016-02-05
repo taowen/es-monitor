@@ -12,6 +12,7 @@ import sqlparse
 from sqlparse.sql_select import SqlSelect
 import in_mem_computation
 import select_inside_translator
+import select_from_translator
 
 DEBUG = False
 
@@ -66,8 +67,9 @@ def execute_sql_select(es_hosts, sql_select, inner_aggs=None):
                 response = execute_sql_select(es_hosts, sql_select.select_from, request['aggs'])
                 return select_response(response)
             else:
-                print(request)
-                raise Exception('not implemented')
+                bucket_selector_agg = select_from_translator.translate_select(sql_select)
+                response = execute_sql_select(es_hosts, sql_select.select_from, bucket_selector_agg)
+                return response
 
 
 if __name__ == "__main__":
