@@ -11,7 +11,7 @@ import json
 import sqlparse
 from sqlparse.sql_select import SqlSelect
 import in_mem_computation
-import translators
+import select_inside_translator
 
 DEBUG = False
 
@@ -27,7 +27,7 @@ def execute_sql(es_hosts, sql):
 
 
 def execute_sql_select(es_hosts, sql_select, inner_aggs=None):
-    request, select_response = translators.translate_select(sql_select)
+    request, select_response = select_inside_translator.translate_select(sql_select)
     inner_aggs = inner_aggs or {}
     if inner_aggs:
         outter_aggs = request['aggs']['_global_']['aggs']
@@ -60,7 +60,7 @@ def execute_sql_select(es_hosts, sql_select, inner_aggs=None):
             response = execute_sql_select(es_hosts, sql_select.select_from)
             return in_mem_computation.do_in_mem_computation(sql_select, response)
         else:
-            if sql_select.is_inside_query:
+            if sql_select.is_select_inside:
                 if 'aggs' not in request:
                     raise Exception('SELECT ... INSIDE ... can only nest aggregation query')
                 response = execute_sql_select(es_hosts, sql_select.select_from, request['aggs'])

@@ -13,7 +13,7 @@ class SqlSelect(object):
         self.limit = None
         self.having = None
         self.where = None
-        self.is_inside_query = False
+        self.is_select_inside = False
 
     def on_SELECT(self, tokens):
         if not (ttypes.DML == tokens[0].ttype and 'SELECT' == tokens[0].value.upper()):
@@ -27,7 +27,7 @@ class SqlSelect(object):
                 continue
             if ttypes.Keyword == token.ttype:
                 if token.value.upper() in ('FROM', 'INSIDE'):
-                    self.is_inside_query = 'INSIDE' == token.value.upper()
+                    self.is_select_inside = 'INSIDE' == token.value.upper()
                     from_found = True
                     idx = self.on_FROM(tokens, idx)
                     continue
@@ -79,7 +79,8 @@ class SqlSelect(object):
                 break
             elif isinstance(token, stypes.Parenthesis):
                 self.select_from = SqlSelect()
-                self.select_from.on_SELECT(sqlparse.parse(token.value[1:-1].strip())[0])
+                select_from = sqlparse.parse(token.value[1:-1].strip())[0]
+                self.select_from.on_SELECT(select_from.tokens)
                 break
             else:
                 raise Exception('unexpected: %s' % repr(token))

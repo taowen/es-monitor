@@ -5,6 +5,7 @@ import filter_translator
 import case_when_translator
 import metric_translator
 
+
 def translate_select(sql_select):
     translator = Translator(sql_select)
     return translator.request, translator
@@ -14,13 +15,13 @@ class Translator(object):
     def __init__(self, sql_select):
         self.sql_select = sql_select
         self.request = {}
-        self.metric_request, self.metric_selector = metric_translator.translate_metrics(sql_select)
         if self.is_aggregation():
+            self.metric_request, self.metric_selector = metric_translator.translate_metrics(sql_select)
             self.build_aggregation_request()
         else:
             self.build_non_aggregation_request()
 
-    def __call__(self, response):
+    def __call__(self, response):  # select_response()
         if self.is_aggregation():
             return self.select_aggregation_response(response)
         else:
