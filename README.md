@@ -82,8 +82,18 @@ select pivot(errno, value) from (
 {"errno_0": 234171, "errno_97": 76}
 ```
 
+## 减少不同的写法
+
+* 不支持 a NOT IN b, a IS NOT NULL 使用 NOT a IN b 替代
+* 如果使用了函数必须有AS，引用函数计算的值用AS的变量名替代
+
 TODO
 
+* support output=None, support inputs[-1]
+* support SELECT * INSIDE ()
+* support parent pipeline aggregation at metric level: derivative, difference, moving average, cumulative sum
+* in memory computation support where, group by
+* implement nested where to replace having
 * support cross layer having
 * support bucket script
 * histogram aggregation

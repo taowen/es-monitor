@@ -13,6 +13,7 @@ class SqlSelect(object):
         self.limit = None
         self.having = None
         self.where = None
+        self.is_inside_query = False
 
     def on_SELECT(self, tokens):
         if not (ttypes.DML == tokens[0].ttype and 'SELECT' == tokens[0].value.upper()):
@@ -25,7 +26,8 @@ class SqlSelect(object):
             if token.ttype in (ttypes.Whitespace, ttypes.Comment):
                 continue
             if ttypes.Keyword == token.ttype:
-                if 'FROM' == token.value.upper():
+                if token.value.upper() in ('FROM', 'INSIDE'):
+                    self.is_inside_query = 'INSIDE' == token.value.upper()
                     from_found = True
                     idx = self.on_FROM(tokens, idx)
                     continue

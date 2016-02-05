@@ -71,14 +71,15 @@ class SqlExecutor(object):
     def execute(self, statement, inner_aggs=None):
         inner_aggs = inner_aggs or {}
         self.on_SELECT(statement.tokens)
-        outter_aggs = self.request['aggs']
-        if self.group_by:
-            for group_by_name in self.group_by.keys():
-                outter_aggs = outter_aggs[group_by_name]['aggs']
-        else:
-            if '_global_' in outter_aggs:
-                outter_aggs = outter_aggs['_global_']['aggs']
-        outter_aggs.update(inner_aggs)
+        if inner_aggs:
+            outter_aggs = self.request['aggs']
+            if self.group_by:
+                for group_by_name in self.group_by.keys():
+                    outter_aggs = outter_aggs[group_by_name]['aggs']
+            else:
+                if '_global_' in outter_aggs:
+                    outter_aggs = outter_aggs['_global_']['aggs']
+            outter_aggs.update(inner_aggs)
         if DEBUG:
             print('=====')
             print(json.dumps(self.request, indent=2))
@@ -106,12 +107,17 @@ class SqlExecutor(object):
                 self.on_SELECT(statement.tokens)
                 return self.rows
             else:
-                inner_executor = SqlExecutor()
-                inner_executor.include_bucket_in_row = True
-                inner_rows = inner_executor.execute(self.select_from, self.request['aggs'])
-                self.response = inner_rows
-                self.on_SELECT(statement.tokens)
-                return self.rows
+                if self.sql_select.is_inside_query:
+                    inner_executor = SqlExecutor()
+                    inner_executor.include_bucket_in_row = True
+                    if 'aggs' not in self.request:
+                        raise Exception('SELECT ... INSIDE ... can only nest aggregation query')
+                    inner_rows = inner_executor.execute(self.select_from, self.request['aggs'])
+                    self.response = inner_rows
+                    self.on_SELECT(statement.tokens)
+                    return self.rows
+                else:
+                    raise Exception('not implemented')
 
 
     def on_SELECT(self, tokens):

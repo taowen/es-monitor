@@ -542,6 +542,7 @@ KEYWORDS_COMMON = {
 
     'WHERE': tokens.Keyword,
     'FROM': tokens.Keyword,
+    'INSIDE': tokens.Keyword,
     'INNER': tokens.Keyword,
     'JOIN': tokens.Keyword,
     'STRAIGHT_JOIN': tokens.Keyword,
