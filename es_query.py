@@ -15,6 +15,7 @@ from sql_select import SqlSelect
 import in_mem_computation
 import filter_translator
 import case_when_translator
+import metric_translator
 
 DEBUG = False
 
@@ -39,16 +40,7 @@ class SqlExecutor(object):
         # internal state
         self.sql_select = sql_select
         self.include_bucket_in_row = False
-        self.metric_request = {}
-        self.metric_selector = {}
-        for projection_name, projection in self.sql_select.projections.iteritems():
-            if projection.ttype in (ttypes.Name, ttypes.String.Symbol):
-                if not self.sql_select.group_by.get(projection_name):
-                    raise Exception('selected field not in group by: %s' % projection_name)
-            elif isinstance(projection, stypes.Function):
-                self.create_metric_aggregation(projection, projection_name)
-            else:
-                raise Exception('unexpected: %s' % repr(projection))
+        self.metric_request, self.metric_selector = metric_translator.translate_metrics(sql_select)
         if self.is_aggregation():
             self.build_aggregation_request()
         else:
@@ -63,13 +55,10 @@ class SqlExecutor(object):
     def execute(self, inner_aggs=None):
         inner_aggs = inner_aggs or {}
         if inner_aggs:
-            outter_aggs = self.request['aggs']
+            outter_aggs = self.request['aggs']['_global_']['aggs']
             if self.sql_select.group_by:
                 for group_by_name in self.sql_select.group_by.keys():
                     outter_aggs = outter_aggs[group_by_name]['aggs']
-            else:
-                if '_global_' in outter_aggs:
-                    outter_aggs = outter_aggs['_global_']['aggs']
             outter_aggs.update(inner_aggs)
         if DEBUG:
             print('=====')
@@ -152,13 +141,11 @@ class SqlExecutor(object):
         if isinstance(self.response, list):
             for inner_row in self.response:
                 bucket = inner_row.pop('_bucket_')
-                if not group_by_names:
-                    bucket = bucket['_global_']
+                bucket = bucket['_global_']
                 self.collect_records(bucket, group_by_names, inner_row)
         else:
             agg_response = self.response['aggregations']
-            if not group_by_names:
-                agg_response = agg_response['_global_']
+            agg_response = agg_response['_global_']
             self.collect_records(agg_response, group_by_names, {})
 
     def add_aggs_to_request(self, group_by_names):
@@ -181,8 +168,7 @@ class SqlExecutor(object):
                         current_aggs = self.append_date_histogram_agg(current_aggs, group_by, group_by_name)
                     else:
                         raise Exception('unexpected: %s' % repr(group_by.tokens[0]))
-        else:
-            current_aggs = self.append_global_agg(current_aggs)
+        current_aggs = self.append_global_agg(current_aggs)
         self.request.update(current_aggs)
 
     def process_having_agg(self, bucket_selector_agg, tokens):
@@ -247,9 +233,13 @@ class SqlExecutor(object):
         return current_aggs
 
     def append_global_agg(self, current_aggs):
+        if self.sql_select.where:
+            filter = filter_translator.create_compound_filter(self.sql_select.where.tokens[1:])
+        else:
+            filter = {}
         current_aggs = {
             'aggs': {'_global_': dict(current_aggs, **{
-                'filter': self.request.get('query') or {}
+                'filter': filter
             })}
         }
         return current_aggs
@@ -287,37 +277,6 @@ class SqlExecutor(object):
             if self.include_bucket_in_row:
                 record['_bucket_'] = parent_bucket
             self.rows.append(record)
-
-    def create_metric_aggregation(self, sql_function, metric_name):
-        if not isinstance(sql_function, stypes.Function):
-            raise Exception('unexpected: %s' % repr(sql_function))
-        sql_function_name = sql_function.tokens[0].get_name().upper()
-        if 'COUNT' == sql_function_name:
-            params = list(sql_function.get_parameters())
-            if params:
-                count_keyword = sql_function.tokens[1].token_next_by_type(0, ttypes.Keyword)
-                self.metric_selector[metric_name] = lambda bucket: bucket[metric_name]['value']
-                if count_keyword:
-                    if 'DISTINCT' == count_keyword.value.upper():
-                        self.metric_request[metric_name] = {
-                            'cardinality': {
-                                'field': params[0].get_name()
-                            }}
-                    else:
-                        raise Exception('unexpected: %s' % repr(count_keyword))
-                else:
-                    self.metric_request[metric_name] = {
-                        'value_count': {'field': params[0].get_name()}}
-            else:
-                self.metric_selector[metric_name] = lambda bucket: bucket['doc_count']
-        elif sql_function_name in ('MAX', 'MIN', 'AVG', 'SUM'):
-            if len(sql_function.get_parameters()) != 1:
-                raise Exception('unexpected: %s' % repr(sql_function))
-            self.metric_selector[metric_name] = lambda bucket: bucket[metric_name]['value']
-            self.metric_request[metric_name] = {
-                sql_function_name.lower(): {'field': sql_function.get_parameters()[0].get_name()}}
-        else:
-            raise Exception('unsupported function: %s' % repr(sql_function))
 
     def build_non_aggregation_request(self):
         if self.sql_select.order_by:
