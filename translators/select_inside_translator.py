@@ -1,12 +1,12 @@
 from sqlparse import tokens as ttypes
 from sqlparse import sql as stypes
-import in_mem_computation
 import filter_translator
 import case_when_translator
 import metric_translator
+import having_translator
 
 
-def translate_select(sql_select):
+def translate_select_inside(sql_select):
     translator = Translator(sql_select)
     return translator.request, translator
 
@@ -73,9 +73,7 @@ class Translator(object):
         if self.metric_request:
             current_aggs = {'aggs': self.metric_request}
         if self.sql_select.having:
-            bucket_selector_agg = {'buckets_path': {}, 'script': {'lang': 'expression', 'inline': ''}}
-            self.process_having_agg(bucket_selector_agg, self.sql_select.having)
-            current_aggs['aggs']['having'] = {'bucket_selector': bucket_selector_agg}
+            current_aggs['aggs'].update(having_translator.translate_having(self.sql_select, self.sql_select.having))
         if group_by_names:
             for group_by_name in group_by_names:
                 group_by = self.sql_select.group_by.get(group_by_name)
@@ -90,33 +88,6 @@ class Translator(object):
                         raise Exception('unexpected: %s' % repr(group_by.tokens[0]))
         current_aggs = self.append_global_agg(current_aggs)
         self.request.update(current_aggs)
-
-    def process_having_agg(self, bucket_selector_agg, tokens):
-        for token in tokens:
-            if '@now' in token.value:
-                bucket_selector_agg['script']['inline'] = '%s%s' % (
-                    bucket_selector_agg['script']['inline'], filter_translator.eval_numeric_value(token.value))
-            elif token.ttype == ttypes.Keyword and 'AND' == token.value.upper():
-                bucket_selector_agg['script']['inline'] = '%s%s' % (
-                    bucket_selector_agg['script']['inline'], '&&')
-            elif token.ttype == ttypes.Keyword and 'OR' == token.value.upper():
-                bucket_selector_agg['script']['inline'] = '%s%s' % (
-                    bucket_selector_agg['script']['inline'], '||')
-            elif token.is_group():
-                self.process_having_agg(bucket_selector_agg, token.tokens)
-            else:
-                if ttypes.Name == token.ttype:
-                    variable_name = token.value
-                    projection = self.sql_select.projections.get(variable_name)
-                    if not projection:
-                        raise Exception(
-                            'having clause referenced variable must exist in select clause: %s' % variable_name)
-                    if is_count_star(projection):
-                        bucket_selector_agg['buckets_path'][variable_name] = '_count'
-                    else:
-                        bucket_selector_agg['buckets_path'][variable_name] = variable_name
-                bucket_selector_agg['script']['inline'] = '%s%s' % (
-                    bucket_selector_agg['script']['inline'], token.value)
 
     def append_terms_agg(self, current_aggs, group_by_name):
         current_aggs = {
@@ -217,7 +188,7 @@ class Translator(object):
                     if path in hit.keys():
                         record[projection_name] = hit[path]
                     else:
-                        record[projection_name] = self.get_object_member(
+                        record[projection_name] = get_object_member(
                             hit['_source'], path.split('.'))
                 else:
                     raise Exception('unexpected: %s' % repr(projection))
@@ -233,7 +204,7 @@ class Translator(object):
             projection = self.sql_select.projections.get(id.get_name())
             if not projection:
                 raise Exception('can only sort on selected field: %s' % id.get_name())
-            if is_count_star(projection):
+            if having_translator.is_count_star(projection):
                 sort.append({'_count': asc_or_desc})
             elif agg and id.get_name() == agg[0]:
                 if 'terms' == agg[1]:
@@ -244,16 +215,11 @@ class Translator(object):
                 sort.append({id.get_name(): asc_or_desc})
         return sort
 
-    def get_object_member(self, obj, paths):
-        if obj is None:
-            return None
-        if len(paths) == 1:
-            return obj.get(paths[0])
-        else:
-            return self.get_object_member(obj.get(paths[0]), paths[1:])
 
-
-def is_count_star(projection):
-    return isinstance(projection, stypes.Function) \
-           and 'COUNT' == projection.tokens[0].get_name().upper() \
-           and not projection.get_parameters()
+def get_object_member(obj, paths):
+    if obj is None:
+        return None
+    if len(paths) == 1:
+        return obj.get(paths[0])
+    else:
+        return get_object_member(obj.get(paths[0]), paths[1:])

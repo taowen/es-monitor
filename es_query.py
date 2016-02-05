@@ -11,8 +11,7 @@ import json
 import sqlparse
 from sqlparse.sql_select import SqlSelect
 import in_mem_computation
-import select_inside_translator
-import select_from_translator
+import translators
 
 DEBUG = False
 
@@ -28,7 +27,7 @@ def execute_sql(es_hosts, sql):
 
 
 def execute_sql_select(es_hosts, sql_select, inner_aggs=None):
-    request, select_response = select_inside_translator.translate_select(sql_select)
+    request, select_response = translators.translate_select_inside(sql_select)
     inner_aggs = inner_aggs or {}
     if inner_aggs:
         outter_aggs = request['aggs']['_global_']['aggs']
@@ -67,9 +66,9 @@ def execute_sql_select(es_hosts, sql_select, inner_aggs=None):
                 response = execute_sql_select(es_hosts, sql_select.select_from, request['aggs'])
                 return select_response(response)
             else:
-                bucket_selector_agg = select_from_translator.translate_select(sql_select)
+                bucket_selector_agg, select_response = translators.translate_select_from(sql_select)
                 response = execute_sql_select(es_hosts, sql_select.select_from, bucket_selector_agg)
-                return response
+                return select_response(response)
 
 
 if __name__ == "__main__":
