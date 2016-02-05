@@ -49,6 +49,10 @@ class SqlExecutor(object):
                 self.create_metric_aggregation(projection, projection_name)
             else:
                 raise Exception('unexpected: %s' % repr(projection))
+        if self.is_aggregation():
+            self.build_aggregation_request()
+        else:
+            self.build_non_aggregation_request()
 
     @classmethod
     def create(cls, tokens):
@@ -58,7 +62,6 @@ class SqlExecutor(object):
 
     def execute(self, inner_aggs=None):
         inner_aggs = inner_aggs or {}
-        self.on_SELECT()
         if inner_aggs:
             outter_aggs = self.request['aggs']
             if self.sql_select.group_by:
@@ -87,12 +90,12 @@ class SqlExecutor(object):
             if DEBUG:
                 print('=====')
                 print(json.dumps(self.response, indent=2))
-            self.on_SELECT()
+            self.select_response()
             return self.rows
         else:
             if in_mem_computation.is_in_mem_computation(self.sql_select):
                 self.response = SqlExecutor.create(self.sql_select.select_from.tokens).execute()
-                self.on_SELECT()
+                self.select_response()
                 return self.rows
             else:
                 if self.sql_select.is_inside_query:
@@ -102,24 +105,22 @@ class SqlExecutor(object):
                         raise Exception('SELECT ... INSIDE ... can only nest aggregation query')
                     inner_rows = inner_executor.execute(self.request['aggs'])
                     self.response = inner_rows
-                    self.on_SELECT()
+                    self.select_response()
                     return self.rows
                 else:
                     print(self.request)
                     raise Exception('not implemented')
 
-
-    def on_SELECT(self):
-        if self.sql_select.where and not self.response:
-            self.request['query'] = filter_translator.create_compound_filter(self.sql_select.where.tokens[1:])
+    def select_response(self):
         if in_mem_computation.is_in_mem_computation(self.sql_select):
-            if self.response:
-                self.rows = in_mem_computation.do_in_mem_computation(self.sql_select, self.response)
-        elif self.sql_select.group_by or self.has_function_projection():
-            self.request['size'] = 0
-            self.analyze_projections_and_group_by()
+            self.rows = in_mem_computation.do_in_mem_computation(self.sql_select, self.response)
+        elif self.is_aggregation():
+            self.select_aggregation_response()
         else:
-            self.analyze_non_aggregation()
+            self.select_non_aggregation_response()
+
+    def is_aggregation(self):
+        return self.sql_select.group_by or self.has_function_projection()
 
     def has_function_projection(self):
         for projection in self.sql_select.projections.values():
@@ -127,24 +128,10 @@ class SqlExecutor(object):
                 return True
         return False
 
-    def analyze_projections_and_group_by(self):
+    def build_aggregation_request(self):
+        self.request['size'] = 0 # do not need hits in response
         reversed_group_by_names = list(reversed(self.sql_select.group_by.keys())) if self.sql_select.group_by else []
-        group_by_names = self.sql_select.group_by.keys() if self.sql_select.group_by else []
-        if self.response:
-            self.rows = []
-            if isinstance(self.response, list):
-                for inner_row in self.response:
-                    bucket = inner_row.pop('_bucket_')
-                    if not group_by_names:
-                        bucket = bucket['_global_']
-                    self.collect_records(bucket, group_by_names, inner_row)
-            else:
-                agg_response = self.response['aggregations']
-                if not group_by_names:
-                    agg_response = agg_response['_global_']
-                self.collect_records(agg_response, group_by_names, {})
-        else:
-            self.add_aggs_to_request(reversed_group_by_names)
+        self.add_aggs_to_request(reversed_group_by_names)
         if self.sql_select.order_by or self.sql_select.limit:
             if len(self.sql_select.group_by or {}) != 1:
                 raise Exception('order by can only be applied on single group by')
@@ -158,6 +145,21 @@ class SqlExecutor(object):
                 agg['order'] = self.create_sort((reversed_group_by_names[0], agg_type))
             if self.sql_select.limit:
                 agg['size'] = self.sql_select.limit
+
+    def select_aggregation_response(self):
+        group_by_names = self.sql_select.group_by.keys() if self.sql_select.group_by else []
+        self.rows = []
+        if isinstance(self.response, list):
+            for inner_row in self.response:
+                bucket = inner_row.pop('_bucket_')
+                if not group_by_names:
+                    bucket = bucket['_global_']
+                self.collect_records(bucket, group_by_names, inner_row)
+        else:
+            agg_response = self.response['aggregations']
+            if not group_by_names:
+                agg_response = agg_response['_global_']
+            self.collect_records(agg_response, group_by_names, {})
 
     def add_aggs_to_request(self, group_by_names):
         current_aggs = {'aggs': {}}
@@ -317,29 +319,31 @@ class SqlExecutor(object):
         else:
             raise Exception('unsupported function: %s' % repr(sql_function))
 
-    def analyze_non_aggregation(self):
-        if self.response:
-            self.rows = []
-            for hit in self.response['hits']['hits']:
-                record = {}
-                for projection_name, projection in self.sql_select.projections.iteritems():
-                    if projection.ttype == ttypes.Wildcard:
-                        record = hit['_source']
-                    elif projection.ttype in (ttypes.String.Symbol, ttypes.Name):
-                        path = eval(projection.value) if projection.value.startswith('"') else projection.value
-                        if path in hit.keys():
-                            record[projection_name] = hit[path]
-                        else:
-                            record[projection_name] = self.get_object_member(
-                                hit['_source'], path.split('.'))
+    def build_non_aggregation_request(self):
+        if self.sql_select.order_by:
+            self.request['sort'] = self.create_sort()
+        if self.sql_select.limit:
+            self.request['size'] = self.sql_select.limit
+        if self.sql_select.where:
+            self.request['query'] = filter_translator.create_compound_filter(self.sql_select.where.tokens[1:])
+
+    def select_non_aggregation_response(self):
+        self.rows = []
+        for hit in self.response['hits']['hits']:
+            record = {}
+            for projection_name, projection in self.sql_select.projections.iteritems():
+                if projection.ttype == ttypes.Wildcard:
+                    record = hit['_source']
+                elif projection.ttype in (ttypes.String.Symbol, ttypes.Name):
+                    path = eval(projection.value) if projection.value.startswith('"') else projection.value
+                    if path in hit.keys():
+                        record[projection_name] = hit[path]
                     else:
-                        raise Exception('unexpected: %s' % repr(projection))
-                self.rows.append(record)
-        else:
-            if self.sql_select.order_by:
-                self.request['sort'] = self.create_sort()
-            if self.sql_select.limit:
-                self.request['size'] = self.sql_select.limit
+                        record[projection_name] = self.get_object_member(
+                            hit['_source'], path.split('.'))
+                else:
+                    raise Exception('unexpected: %s' % repr(projection))
+            self.rows.append(record)
 
     def create_sort(self, agg=None):
         sort = []
