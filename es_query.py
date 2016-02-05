@@ -24,11 +24,11 @@ def execute_sql(es_hosts, sql):
 
     ES_HOSTS = es_hosts
     statement = sqlparse.parse(sql.strip())[0]
-    return SqlExecutor().execute(statement)
+    return SqlExecutor.create(statement.tokens).execute()
 
 
 class SqlExecutor(object):
-    def __init__(self):
+    def __init__(self, sql_select):
         # output of request stage
         self.request = {}
         # input of response stage
@@ -37,8 +37,14 @@ class SqlExecutor(object):
         self.rows = None
 
         # internal state
-        self.sql_select = None
+        self.sql_select = sql_select
         self.include_bucket_in_row = False
+
+    @classmethod
+    def create(cls, tokens):
+        sql_select = SqlSelect()
+        sql_select.on_SELECT(tokens)
+        return SqlExecutor(sql_select)
 
     @property
     def projections(self):
@@ -68,9 +74,9 @@ class SqlExecutor(object):
     def select_from(self):
         return self.sql_select.select_from
 
-    def execute(self, statement, inner_aggs=None):
+    def execute(self, inner_aggs=None):
         inner_aggs = inner_aggs or {}
-        self.on_SELECT(statement.tokens)
+        self.on_SELECT()
         if inner_aggs:
             outter_aggs = self.request['aggs']
             if self.group_by:
@@ -99,31 +105,29 @@ class SqlExecutor(object):
             if DEBUG:
                 print('=====')
                 print(json.dumps(self.response, indent=2))
-            self.on_SELECT(statement.tokens)
+            self.on_SELECT()
             return self.rows
         else:
             if in_mem_computation.is_in_mem_computation(self.sql_select):
-                self.response = SqlExecutor().execute(self.select_from)
-                self.on_SELECT(statement.tokens)
+                self.response = SqlExecutor.create(self.select_from.tokens).execute()
+                self.on_SELECT()
                 return self.rows
             else:
                 if self.sql_select.is_inside_query:
-                    inner_executor = SqlExecutor()
+                    inner_executor = SqlExecutor.create(self.select_from.tokens)
                     inner_executor.include_bucket_in_row = True
                     if 'aggs' not in self.request:
                         raise Exception('SELECT ... INSIDE ... can only nest aggregation query')
-                    inner_rows = inner_executor.execute(self.select_from, self.request['aggs'])
+                    inner_rows = inner_executor.execute(self.request['aggs'])
                     self.response = inner_rows
-                    self.on_SELECT(statement.tokens)
+                    self.on_SELECT()
                     return self.rows
                 else:
+                    print(self.request)
                     raise Exception('not implemented')
 
 
-    def on_SELECT(self, tokens):
-        if not self.sql_select:
-            self.sql_select = SqlSelect()
-            self.sql_select.on_SELECT(tokens)
+    def on_SELECT(self):
         if self.where and not self.response:
             self.request['query'] = filter_translator.create_compound_filter(self.where.tokens[1:])
         if in_mem_computation.is_in_mem_computation(self.sql_select):

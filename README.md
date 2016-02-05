@@ -46,22 +46,15 @@ select status, count(*) as value from gs_plutus_debug
 select per_minute, count(*) from gs_plutus_debug_
     where "timestamp">@now-5m group by to_char(date_trunc('minute', "timestamp"),'yyyy-MM-dd HH:mm:ss') as per_minute```
 
-## 聚合后二次计算
 
-* 普通的SQL子查询聚合越聚合越少，但是Elasticsearch的嵌套聚合是越聚合越多。上一层从下一层的结果里进一步
-group by（或者过滤）是表示对数据的进一步细分，从语义上来说和SQL是相反的。```
-select count(*) as sub_count from (
-    select count(*) as total_count from gs_api_track where "@timestamp" > @now-10s
-    group by date_trunc('second', "@timestamp") as ts) where "order.district"='010'``` 返回的结果类似这样 ```
-{"total_count": 13, "sub_count": 1, "ts": "2016-02-05T00:16:16.000+08:00"}
-{"total_count": 7, "sub_count": 5, "ts": "2016-02-05T00:16:17.000+08:00"}
-{"total_count": 0, "sub_count": 0, "ts": "2016-02-05T00:16:18.000+08:00"}
-{"total_count": 0, "sub_count": 0, "ts": "2016-02-05T00:16:19.000+08:00"}
-{"total_count": 0, "sub_count": 0, "ts": "2016-02-05T00:16:20.000+08:00"}
-{"total_count": 88, "sub_count": 17, "ts": "2016-02-05T00:16:21.000+08:00"}
-{"total_count": 9, "sub_count": 2, "ts": "2016-02-05T00:16:22.000+08:00"}
-{"total_count": 5, "sub_count": 1, "ts": "2016-02-05T00:16:23.000+08:00"}
-{"total_count": 4, "sub_count": 1, "ts": "2016-02-05T00:16:24.000+08:00"}```
+## 嵌套下钻
+
+* Elasticsearch 支持对一次聚合的结果进行下钻获取细分的聚合。所以扩充了SQL的语法支持了SELECT INSIDE，比如 ```
+select count(*) as success inside (select count(*) as total
+from "gs_plutus_debug_2016-02-05" where "timestamp" > @now-5m) where errno=0```
+
+## 嵌套子查询
+
 * 支持 Having 对聚合的结果进行二次过滤 ```
 select count(*) as total_count from gs_api_track
     where "@timestamp" > @now-10s group by date_trunc('second', "@timestamp") as ts
