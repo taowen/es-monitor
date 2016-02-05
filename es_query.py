@@ -46,41 +46,13 @@ class SqlExecutor(object):
         sql_select.on_SELECT(tokens)
         return SqlExecutor(sql_select)
 
-    @property
-    def projections(self):
-        return self.sql_select.projections
-
-    @property
-    def group_by(self):
-        return self.sql_select.group_by
-
-    @property
-    def order_by(self):
-        return self.sql_select.order_by
-
-    @property
-    def limit(self):
-        return self.sql_select.limit
-
-    @property
-    def having(self):
-        return self.sql_select.having
-
-    @property
-    def where(self):
-        return self.sql_select.where
-
-    @property
-    def select_from(self):
-        return self.sql_select.select_from
-
     def execute(self, inner_aggs=None):
         inner_aggs = inner_aggs or {}
         self.on_SELECT()
         if inner_aggs:
             outter_aggs = self.request['aggs']
-            if self.group_by:
-                for group_by_name in self.group_by.keys():
+            if self.sql_select.group_by:
+                for group_by_name in self.sql_select.group_by.keys():
                     outter_aggs = outter_aggs[group_by_name]['aggs']
             else:
                 if '_global_' in outter_aggs:
@@ -89,8 +61,8 @@ class SqlExecutor(object):
         if DEBUG:
             print('=====')
             print(json.dumps(self.request, indent=2))
-        if isinstance(self.select_from, basestring):
-            url = ES_HOSTS + '/%s*/_search' % self.select_from
+        if isinstance(self.sql_select.select_from, basestring):
+            url = ES_HOSTS + '/%s*/_search' % self.sql_select.select_from
             try:
                 resp = urllib2.urlopen(url, json.dumps(self.request)).read()
             except urllib2.HTTPError as e:
@@ -109,12 +81,12 @@ class SqlExecutor(object):
             return self.rows
         else:
             if in_mem_computation.is_in_mem_computation(self.sql_select):
-                self.response = SqlExecutor.create(self.select_from.tokens).execute()
+                self.response = SqlExecutor.create(self.sql_select.select_from.tokens).execute()
                 self.on_SELECT()
                 return self.rows
             else:
                 if self.sql_select.is_inside_query:
-                    inner_executor = SqlExecutor.create(self.select_from.tokens)
+                    inner_executor = SqlExecutor.create(self.sql_select.select_from.tokens)
                     inner_executor.include_bucket_in_row = True
                     if 'aggs' not in self.request:
                         raise Exception('SELECT ... INSIDE ... can only nest aggregation query')
@@ -128,35 +100,35 @@ class SqlExecutor(object):
 
 
     def on_SELECT(self):
-        if self.where and not self.response:
-            self.request['query'] = filter_translator.create_compound_filter(self.where.tokens[1:])
+        if self.sql_select.where and not self.response:
+            self.request['query'] = filter_translator.create_compound_filter(self.sql_select.where.tokens[1:])
         if in_mem_computation.is_in_mem_computation(self.sql_select):
             if self.response:
                 self.rows = in_mem_computation.do_in_mem_computation(self.sql_select, self.response)
-        elif self.group_by or self.has_function_projection():
+        elif self.sql_select.group_by or self.has_function_projection():
             self.request['size'] = 0
             self.analyze_projections_and_group_by()
         else:
             self.analyze_non_aggregation()
 
     def has_function_projection(self):
-        for projection in self.projections.values():
+        for projection in self.sql_select.projections.values():
             if isinstance(projection, stypes.Function):
                 return True
         return False
 
     def analyze_projections_and_group_by(self):
         metrics = {}
-        for projection_name, projection in self.projections.iteritems():
+        for projection_name, projection in self.sql_select.projections.iteritems():
             if projection.ttype in (ttypes.Name, ttypes.String.Symbol):
-                if not self.group_by.get(projection_name):
+                if not self.sql_select.group_by.get(projection_name):
                     raise Exception('selected field not in group by: %s' % projection_name)
             elif isinstance(projection, stypes.Function):
                 self.create_metric_aggregation(metrics, projection, projection_name)
             else:
                 raise Exception('unexpected: %s' % repr(projection))
-        reversed_group_by_names = list(reversed(self.group_by.keys())) if self.group_by else []
-        group_by_names = self.group_by.keys() if self.group_by else []
+        reversed_group_by_names = list(reversed(self.sql_select.group_by.keys())) if self.sql_select.group_by else []
+        group_by_names = self.sql_select.group_by.keys() if self.sql_select.group_by else []
         if self.response:
             self.rows = []
             if isinstance(self.response, list):
@@ -172,8 +144,8 @@ class SqlExecutor(object):
                 self.collect_records(agg_response, group_by_names, metrics, {})
         else:
             self.add_aggs_to_request(reversed_group_by_names, metrics)
-        if self.order_by or self.limit:
-            if len(self.group_by or {}) != 1:
+        if self.sql_select.order_by or self.sql_select.limit:
+            if len(self.sql_select.group_by or {}) != 1:
                 raise Exception('order by can only be applied on single group by')
             aggs = self.request['aggs'][reversed_group_by_names[0]]
             agg_names = set(aggs.keys()) - set(['aggs'])
@@ -181,22 +153,22 @@ class SqlExecutor(object):
                 raise Exception('order by can only be applied on single group by')
             agg_type = list(agg_names)[0]
             agg = aggs[agg_type]
-            if self.order_by:
+            if self.sql_select.order_by:
                 agg['order'] = self.create_sort((reversed_group_by_names[0], agg_type))
-            if self.limit:
-                agg['size'] = self.limit
+            if self.sql_select.limit:
+                agg['size'] = self.sql_select.limit
 
     def add_aggs_to_request(self, group_by_names, metrics):
         current_aggs = {'aggs': {}}
         if metrics:
             current_aggs = {'aggs': metrics}
-        if self.having:
+        if self.sql_select.having:
             bucket_selector_agg = {'buckets_path': {}, 'script': {'lang': 'expression', 'inline': ''}}
-            self.process_having_agg(bucket_selector_agg, self.having)
+            self.process_having_agg(bucket_selector_agg, self.sql_select.having)
             current_aggs['aggs']['having'] = {'bucket_selector': bucket_selector_agg}
         if group_by_names:
             for group_by_name in group_by_names:
-                group_by = self.group_by.get(group_by_name)
+                group_by = self.sql_select.group_by.get(group_by_name)
                 if group_by.tokens[0].ttype in (ttypes.Name, ttypes.String.Symbol):
                     current_aggs = self.append_terms_agg(current_aggs, group_by_name)
                 else:
@@ -226,7 +198,7 @@ class SqlExecutor(object):
             else:
                 if ttypes.Name == token.ttype:
                     variable_name = token.value
-                    projection = self.projections.get(variable_name)
+                    projection = self.sql_select.projections.get(variable_name)
                     if not projection:
                         raise Exception(
                             'having clause referenced variable must exist in select clause: %s' % variable_name)
@@ -354,7 +326,7 @@ class SqlExecutor(object):
             self.rows = []
             for hit in self.response['hits']['hits']:
                 record = {}
-                for projection_name, projection in self.projections.iteritems():
+                for projection_name, projection in self.sql_select.projections.iteritems():
                     if projection.ttype == ttypes.Wildcard:
                         record = hit['_source']
                     elif projection.ttype in (ttypes.String.Symbol, ttypes.Name):
@@ -368,18 +340,18 @@ class SqlExecutor(object):
                         raise Exception('unexpected: %s' % repr(projection))
                 self.rows.append(record)
         else:
-            if self.order_by:
+            if self.sql_select.order_by:
                 self.request['sort'] = self.create_sort()
-            if self.limit:
-                self.request['size'] = self.limit
+            if self.sql_select.limit:
+                self.request['size'] = self.sql_select.limit
 
     def create_sort(self, agg=None):
         sort = []
-        for id in self.order_by or []:
+        for id in self.sql_select.order_by or []:
             asc_or_desc = 'asc'
             if 'DESC' == id.tokens[-1].value.upper():
                 asc_or_desc = 'desc'
-            projection = self.projections.get(id.get_name())
+            projection = self.sql_select.projections.get(id.get_name())
             if not projection:
                 raise Exception('can only sort on selected field: %s' % id.get_name())
             if is_count_star(projection):
