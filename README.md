@@ -83,11 +83,8 @@ select pivot(errno, value) from (
 TODO
 
 * support output=None, support inputs[-1]
-* support SELECT * INSIDE ()
 * support parent pipeline aggregation at metric level: derivative, difference, moving average, cumulative sum
 * in memory computation support where, group by
-* implement nested where to replace having
-* support cross layer having
 * support bucket script
 * histogram aggregation
 * ``` SELECT user, MAX(value) FROM (SELECT user, COUNT(*) AS value FROM index GROUP BY user)```

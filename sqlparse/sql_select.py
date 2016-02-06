@@ -7,13 +7,29 @@ from sqlparse.ordereddict import OrderedDict
 class SqlSelect(object):
     def __init__(self):
         self.select_from = None
-        self.projections = None
-        self.group_by = None
-        self.order_by = None
+        self.projections = {}
+        self.group_by = OrderedDict()
+        self.order_by = []
         self.limit = None
-        self.having = None
+        self.having = []
         self.where = None
         self.is_select_inside = False
+
+    def get_inside_projection(self, projection_name):
+        projection = self.projections.get(projection_name)
+        if projection:
+            return self.get_bucket_keys(), projection
+        else:
+            if isinstance(self.select_from, SqlSelect):
+                return self.select_from.get_inside_projection(projection_name)
+            else:
+                raise Exception('projection not found: %s' % projection_name)
+
+    def get_bucket_keys(self):
+        if isinstance(self.select_from, basestring):
+            return [self.group_by.keys()]
+        else:
+            return [self.group_by.keys()] + self.select_from.get_bucket_keys()
 
     def on_SELECT(self, tokens):
         if not (ttypes.DML == tokens[0].ttype and 'SELECT' == tokens[0].value.upper()):
