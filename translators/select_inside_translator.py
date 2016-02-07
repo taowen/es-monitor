@@ -40,6 +40,8 @@ class Translator(object):
         self.request['size'] = 0  # do not need hits in response
         reversed_group_by_names = list(reversed(self.sql_select.group_by.keys())) if self.sql_select.group_by else []
         self.add_aggs_to_request(reversed_group_by_names)
+        if isinstance(self.sql_select.select_from, basestring) and self.sql_select.where:
+            self.request['query'] = filter_translator.create_compound_filter(self.sql_select.where.tokens[1:])
         if self.sql_select.order_by or self.sql_select.limit:
             if len(self.sql_select.group_by or {}) != 1:
                 raise Exception('order by can only be applied on single group by')
@@ -60,12 +62,18 @@ class Translator(object):
         if isinstance(response, list):
             for inner_row in response:
                 bucket = inner_row.pop('_bucket_')
-                bucket = bucket['_global_']
-                self.collect_records(rows, bucket, group_by_names, inner_row)
         else:
-            agg_response = response['aggregations']
-            agg_response = agg_response['_global_']
-            self.collect_records(rows, agg_response, group_by_names, {})
+            bucket = response['aggregations']
+        if '_global_' in bucket:
+            bucket = bucket['_global_']
+        else:
+            sibling_keys = set(bucket.keys()) - set(group_by_names)
+            sibling = {}
+            for sibling_key in sibling_keys:
+                sibling[sibling_key] = bucket[sibling_key]['value']
+            self.collect_records(rows, bucket, group_by_names, {})
+            for row in rows:
+                row.update(sibling)
         return rows
 
     def add_aggs_to_request(self, group_by_names):
@@ -125,7 +133,10 @@ class Translator(object):
 
     def append_global_agg(self, current_aggs):
         if self.sql_select.where:
-            filter = filter_translator.create_compound_filter(self.sql_select.where.tokens[1:])
+            if isinstance(self.sql_select.select_from, basestring):
+                filter = {}
+            else:
+                filter = filter_translator.create_compound_filter(self.sql_select.where.tokens[1:])
         else:
             filter = {}
         current_aggs = {

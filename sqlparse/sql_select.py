@@ -18,18 +18,18 @@ class SqlSelect(object):
     def get_inside_projection(self, projection_name):
         projection = self.projections.get(projection_name)
         if projection:
-            return self.get_bucket_keys(), projection
+            return self.get_bucket_keys_levels(), projection
         else:
             if isinstance(self.select_from, SqlSelect):
                 return self.select_from.get_inside_projection(projection_name)
             else:
                 raise Exception('projection not found: %s' % projection_name)
 
-    def get_bucket_keys(self):
+    def get_bucket_keys_levels(self):
         if isinstance(self.select_from, basestring):
-            return [self.group_by.keys()]
+            return [['_global_'] + self.group_by.keys()]
         else:
-            return [self.group_by.keys()] + self.select_from.get_bucket_keys()
+            return [['_global_'] + self.group_by.keys()] + self.select_from.get_bucket_keys_levels()
 
     def on_SELECT(self, tokens):
         if not (ttypes.DML == tokens[0].ttype and 'SELECT' == tokens[0].value.upper()):

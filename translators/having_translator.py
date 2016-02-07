@@ -39,6 +39,8 @@ def _translate(sql_select, bucket_selector_agg, tokens):
 
 
 def is_count_star(projection):
+    if isinstance(projection, stypes.Identifier):
+        projection = projection.tokens[0]
     return isinstance(projection, stypes.Function) \
            and 'COUNT' == projection.tokens[0].get_name().upper() \
            and not projection.get_parameters()

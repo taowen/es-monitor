@@ -8,46 +8,37 @@ import functools
 
 def translate_select_from(sql_select):
     if sql_select.where:
-        parent_pipeline_agg = having_translator.translate_having(sql_select.select_from, sql_select.where.tokens[1:])
+        parent_pipeline_aggs = having_translator.translate_having(sql_select.select_from, sql_select.where.tokens[1:])
     else:
-        parent_pipeline_agg = None
-    sibling_pipeline_agg = {}
-    translate_projections(sql_select)
-    return parent_pipeline_agg, sibling_pipeline_agg, functools.partial(select_response, sql_select)
+        parent_pipeline_aggs = None
+    sibling_pipeline_aggs = translate_projections(sql_select)
+    return parent_pipeline_aggs, sibling_pipeline_aggs
 
 
 def translate_projections(sql_select):
+    sibling_pipeline_aggs = {}
     for projection_name, projection in sql_select.projections.iteritems():
+        if isinstance(projection, stypes.Identifier):
+            projection = projection.tokens[0]
         if isinstance(projection, stypes.Function):
-            translate_function(sql_select, projection)
+            sibling_pipeline_aggs[projection_name] = translate_function(
+                sql_select, projection_name, projection)
+    return sibling_pipeline_aggs
 
 
-def translate_function(sql_select, sql_function):
+def translate_function(sql_select, projection_name, sql_function):
     sql_function_name = sql_function.tokens[0].get_name().upper()
     params = sql_function.get_parameters()
     if 'SUM' == sql_function_name:
         projection_name = params[0].get_name()
-        bucket_keys, projection = sql_select.get_inside_projection(projection_name)
-        print(bucket_keys, projection)
+        bucket_keys_levels, projection = sql_select.get_inside_projection(projection_name)
+        bucket_keys_levels[0] = bucket_keys_levels[0][1:]
+        buckets_path = '>'.join(['>'.join(level) for level in bucket_keys_levels])
+        if buckets_path:
+            buckets_path = '%s.%s' % (
+                buckets_path, '_count' if having_translator.is_count_star(projection) else projection.get_name())
+        else:
+            buckets_path = projection.get_name()
+        return {'sum_bucket': {'buckets_path': buckets_path}}
     else:
         raise Exception('unsupported function: %s' % sql_function_name)
-
-
-def select_response(sql_select, response):
-    rows = []
-    for input in response:
-        row = {}
-        for projection_name, projection in sql_select.projections.iteritems():
-            if projection.ttype == ttypes.Wildcard:
-                row = input
-            elif projection.ttype in (ttypes.String.Symbol, ttypes.Name):
-                path = eval(projection.value) if projection.value.startswith('"') else projection.value
-                if path in input.keys():
-                    row[projection_name] = input[path]
-                else:
-                    row[projection_name] = get_object_member(input, path.split('.'))
-            else:
-                raise Exception('unexpected: %s' % repr(projection))
-        row['_bucket_'] = input.get('_bucket_')
-        rows.append(row)
-    return rows
