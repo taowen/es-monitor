@@ -183,15 +183,12 @@ class Translator(object):
             for projection_name, projection in self.sql_select.projections.iteritems():
                 if projection.ttype == ttypes.Wildcard:
                     row = input['_source']
-                elif projection.ttype in (ttypes.String.Symbol, ttypes.Name):
+                else:
                     path = eval(projection.value) if projection.value.startswith('"') else projection.value
                     if path in input.keys():
                         row[projection_name] = input[path]
                     else:
-                        row[projection_name] = get_object_member(
-                            input['_source'], path.split('.'))
-                else:
-                    raise Exception('unexpected: %s' % repr(projection))
+                        row[projection_name] = eval(path, {}, input['_source'])
             rows.append(row)
         return rows
 

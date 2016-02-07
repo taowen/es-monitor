@@ -6,17 +6,16 @@ def translate_metrics(sql_select):
     metric_request = {}
     metric_selector = {}
     for projection_name, projection in sql_select.projections.iteritems():
-        if projection.ttype in (ttypes.Name, ttypes.String.Symbol):
-            if not sql_select.group_by.get(projection_name):
-                raise Exception('selected field not in group by: %s' % projection_name)
-        elif isinstance(projection, stypes.Function):
-            request, selector = translate_metric(projection, projection_name)
-            if request:
-                metric_request[projection_name] = request
-            if selector:
-                metric_selector[projection_name] = selector
-        else:
-            raise Exception('unexpected: %s' % repr(projection))
+        if projection_name in sql_select.group_by:
+            continue
+        sql_function = projection.tokens[0] if isinstance(projection, stypes.Identifier) else projection
+        if not isinstance(sql_function, stypes.Function):
+            raise Exception('can only select group by fields or function in aggregation mode')
+        request, selector = translate_metric(sql_function, projection_name)
+        if request:
+            metric_request[projection_name] = request
+        if selector:
+            metric_selector[projection_name] = selector
     return metric_request, metric_selector
 
 

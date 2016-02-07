@@ -76,11 +76,8 @@ class SqlSelect(object):
             ids = [token]
         self.projections = {}
         for id in ids:
-            if isinstance(id, stypes.TokenList):
-                if isinstance(id, stypes.Identifier):
-                    self.projections[id.get_name()] = id.tokens[0]
-                else:
-                    self.projections[id.get_name()] = id
+            if isinstance(id, stypes.Identifier):
+                self.projections[id.get_name()] = id
             else:
                 self.projections[id.value] = id
 

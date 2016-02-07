@@ -1,4 +1,5 @@
 from sqlparse import tokens as ttypes
+from sqlparse import sql as stypes
 import filter_translator
 import having_translator
 from select_inside_translator import get_object_member
@@ -7,10 +8,29 @@ import functools
 
 def translate_select_from(sql_select):
     if sql_select.where:
-        bucket_selector_agg = having_translator.translate_having(sql_select.select_from, sql_select.where.tokens[1:])
+        parent_pipeline_agg = having_translator.translate_having(sql_select.select_from, sql_select.where.tokens[1:])
     else:
-        bucket_selector_agg = None
-    return bucket_selector_agg, functools.partial(select_response, sql_select)
+        parent_pipeline_agg = None
+    sibling_pipeline_agg = {}
+    translate_projections(sql_select)
+    return parent_pipeline_agg, sibling_pipeline_agg, functools.partial(select_response, sql_select)
+
+
+def translate_projections(sql_select):
+    for projection_name, projection in sql_select.projections.iteritems():
+        if isinstance(projection, stypes.Function):
+            translate_function(sql_select, projection)
+
+
+def translate_function(sql_select, sql_function):
+    sql_function_name = sql_function.tokens[0].get_name().upper()
+    params = sql_function.get_parameters()
+    if 'SUM' == sql_function_name:
+        projection_name = params[0].get_name()
+        bucket_keys, projection = sql_select.get_inside_projection(projection_name)
+        print(bucket_keys, projection)
+    else:
+        raise Exception('unsupported function: %s' % sql_function_name)
 
 
 def select_response(sql_select, response):

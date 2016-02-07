@@ -27,7 +27,7 @@ def execute_sql(es_hosts, sql):
     sql_select.on_SELECT(statement.tokens)
     rows = create_executor(sql_select).execute()
     for row in rows:
-        row.pop('_bucket_')
+        row.pop('_bucket_', None)
     return rows
 
 
@@ -100,8 +100,10 @@ class SelectInsideExecutor(object):
     def get_inner_aggs(self, aggs, sql_select):
         if isinstance(sql_select.select_from, basestring):
             return aggs
-        aggs = aggs['_global_']['aggs']
-        bucket_keys = list(itertools.chain(*sql_select.select_from.get_bucket_keys()))
+        bucket_keys = []
+        for keys in sql_select.select_from.get_bucket_keys():
+            bucket_keys.append('_global_')
+            bucket_keys.extend(keys)
         for bucket_key in bucket_keys:
             aggs = aggs[bucket_key]['aggs']
         return aggs
@@ -114,11 +116,12 @@ class SelectInsideExecutor(object):
 class SelectFromExecutor(object):
     def __init__(self, sql_select):
         self.sql_select = sql_select
-        bucket_selector_agg, self.select_response = translators.translate_select_from(sql_select)
+        parent_pipeline_agg, sibling_pipeline_agg, self.select_response = translators.translate_select_from(sql_select)
         self.inner_executor = create_executor(sql_select.select_from)
         self.request = self.inner_executor.request
         inner_aggs = self.get_inner_aggs(self.request['aggs'], sql_select)
-        inner_aggs.update(bucket_selector_agg)
+        inner_aggs.update(parent_pipeline_agg or {})
+        self.request['aggs'].update(sibling_pipeline_agg)
 
     def get_inner_aggs(self, aggs, sql_select):
         aggs = aggs['_global_']['aggs']
