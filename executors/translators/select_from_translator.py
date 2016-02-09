@@ -14,8 +14,6 @@ def translate_select_from(sql_select):
 def translate_projections(sql_select):
     sibling_pipeline_aggs = {}
     for projection_name, projection in sql_select.projections.iteritems():
-        if isinstance(projection, stypes.Identifier):
-            projection = projection.tokens[0]
         if isinstance(projection, stypes.Function):
             sibling_pipeline_aggs[projection_name] = translate_function(
                 sql_select, projection_name, projection)

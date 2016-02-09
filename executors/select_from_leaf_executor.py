@@ -1,7 +1,7 @@
 from sqlparse import tokens as ttypes
 from translators import filter_translator
 from translators import sort_translator
-from merge_aggs import merge_aggs
+
 
 class SelectFromLeafExecutor(object):
     def __init__(self, sql_select, search_es):

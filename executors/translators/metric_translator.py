@@ -8,10 +8,9 @@ def translate_metrics(sql_select):
     for projection_name, projection in sql_select.projections.iteritems():
         if projection_name in sql_select.group_by:
             continue
-        sql_function = projection.tokens[0] if isinstance(projection, stypes.Identifier) else projection
-        if not isinstance(sql_function, stypes.Function):
+        if not isinstance(projection, stypes.Function):
             raise Exception('can only select group by fields or function in aggregation mode')
-        request, selector = translate_metric(sql_function, projection_name)
+        request, selector = translate_metric(projection, projection_name)
         if request:
             metric_request[projection_name] = request
         if selector:

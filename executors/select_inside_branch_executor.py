@@ -7,10 +7,16 @@ class SelectInsideBranchExecutor(SelectInsideExecutor):
         self.inner_executor = inner_executor
 
     def execute(self, inside_aggs=None, parent_pipeline_aggs=None, sibling_pipeline_aggs=None):
+        next_level_sibling_pipeline_aggs = None
+        if self.sql_select.source.is_select_inside:
+            next_level_sibling_pipeline_aggs = sibling_pipeline_aggs
+            sibling_pipeline_aggs = None
         merge_aggs(
                 self.sql_select, self.request['aggs'],
                 inside_aggs=inside_aggs,
                 parent_pipeline_aggs=parent_pipeline_aggs,
                 sibling_pipeline_aggs=sibling_pipeline_aggs)
-        response = self.inner_executor.execute(inside_aggs=self.request['aggs'])
+        response = self.inner_executor.execute(
+                inside_aggs=self.request['aggs'],
+                sibling_pipeline_aggs=next_level_sibling_pipeline_aggs)
         return self.select_response(response)

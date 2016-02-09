@@ -50,9 +50,9 @@ class SelectInsideExecutor(object):
             sibling = {}
             if '_global_' in bucket:
                 bucket = bucket['_global_']
-            else:
-                sibling_keys = set(bucket.keys()) - set(group_by_names)
-                for sibling_key in sibling_keys:
+            sibling_keys = set(bucket.keys()) - set(group_by_names)
+            for sibling_key in sibling_keys:
+                if isinstance(bucket[sibling_key], dict):
                     sibling[sibling_key] = bucket[sibling_key]['value']
             self.collect_records(rows, bucket, group_by_names, {})
             for row in rows:

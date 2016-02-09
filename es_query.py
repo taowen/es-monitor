@@ -13,6 +13,7 @@ from executors import SelectFromLeafExecutor
 from executors import SelectInsideLeafExecutor
 from executors import SelectFromInMemExecutor
 from executors import SelectInsideBranchExecutor
+from executors import SelectFromAllBucketsExecutor
 from executors import translators, in_mem_computation
 from sqlparse.sql_select import SqlSelect
 
@@ -38,13 +39,16 @@ def create_executor(sql_select):
             return SelectInsideLeafExecutor(sql_select, search_es)
         else:
             return SelectFromLeafExecutor(sql_select, search_es)
-    elif in_mem_computation.is_in_mem_computation(sql_select):
-        return SelectFromInMemExecutor(sql_select, create_executor(sql_select.source))
+    elif sql_select.is_select_inside:
+        return SelectInsideBranchExecutor(sql_select, create_executor(sql_select.source))
     else:
-        if sql_select.is_select_inside:
-            return SelectInsideBranchExecutor(sql_select, create_executor(sql_select.source))
+        if in_mem_computation.is_in_mem_computation(sql_select):
+            return SelectFromInMemExecutor(sql_select, create_executor(sql_select.source))
+        elif SelectFromAllBucketsExecutor.is_select_from_all_buckets(sql_select):
+            return SelectFromAllBucketsExecutor(sql_select, create_executor(sql_select.source))
         else:
             return SelectFromExecutor(sql_select)
+
 
 def search_es(index, request):
     if DEBUG:
@@ -66,9 +70,6 @@ def search_es(index, request):
         print('=====')
         print(json.dumps(response, indent=2))
     return response
-
-
-
 
 
 class SelectInsideExecutor(object):

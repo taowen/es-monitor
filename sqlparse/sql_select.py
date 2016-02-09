@@ -3,6 +3,7 @@ from sqlparse import tokens as ttypes
 from sqlparse import sql as stypes
 from sqlparse.ordereddict import OrderedDict
 
+
 # make the result of sqlparse more usable
 class SqlSelect(object):
     def __init__(self, tokens):
@@ -18,6 +19,14 @@ class SqlSelect(object):
         if isinstance(self.source, basestring):
             if self.group_by or self.has_function_projection():
                 self.is_select_inside = True
+
+    @property
+    def inner_most(self):
+        if isinstance(self.source, basestring):
+            return self
+        if self.is_select_inside and not self.source.is_select_inside:
+            return self
+        return self.source.inner_most
 
     def get_bucket_keys(self):
         if isinstance(self.source, basestring):
@@ -71,7 +80,10 @@ class SqlSelect(object):
         self.projections = {}
         for id in ids:
             if isinstance(id, stypes.Identifier):
-                self.projections[id.get_name()] = id
+                if isinstance(id.tokens[0], stypes.Function):
+                    self.projections[id.get_name()] = id.tokens[0]
+                else:
+                    self.projections[id.get_name()] = id
             else:
                 self.projections[id.value] = id
 
@@ -173,11 +185,8 @@ class SqlSelect(object):
     def on_WHERE(self, where):
         self.where = where
 
-
     def has_function_projection(self):
         for projection in self.projections.values():
-            if isinstance(projection, stypes.Identifier):
-                projection = projection.tokens[0]
             if isinstance(projection, stypes.Function):
                 return True
         return False
