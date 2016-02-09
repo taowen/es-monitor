@@ -50,6 +50,7 @@ def execute_pivot(sql_select, input_rows):
         pivot_to = []
         for pivot_column in pivot_columns:
             pivot_to.append('%s_%s' % (pivot_column, row.pop(pivot_column, None)))
+        row.pop('_bucket_', None)
         value = row.pop(value_column, None)
         group_key = tuple(sorted(dict(row).items()))
         groups[group_key] = groups.get(group_key, row)

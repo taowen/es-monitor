@@ -1,6 +1,6 @@
-from sqlparse import tokens as ttypes
-from sqlparse import sql as stypes
 import filter_translator
+from sqlparse import sql as stypes
+from sqlparse import tokens as ttypes
 
 
 def translate_case_when(case_when):

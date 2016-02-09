@@ -1,9 +1,5 @@
-from sqlparse import tokens as ttypes
-from sqlparse import sql as stypes
-import filter_translator
 import having_translator
-from select_inside_translator import get_object_member
-import functools
+from sqlparse import sql as stypes
 
 
 def translate_select_from(sql_select):

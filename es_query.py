@@ -4,16 +4,17 @@
 """
 Query elasticsearch using SQL
 """
+import json
 import sys
 import urllib2
-import json
 
 import sqlparse
+from executors import SelectFromLeafExecutor
+from executors import SelectInsideLeafExecutor
+from executors import SelectFromInMemExecutor
+from executors import SelectInsideBranchExecutor
+from executors import translators, in_mem_computation
 from sqlparse.sql_select import SqlSelect
-from sqlparse import sql as stypes
-import in_mem_computation
-import translators
-import itertools
 
 DEBUG = False
 ES_HOSTS = None
@@ -34,54 +35,40 @@ def execute_sql(es_hosts, sql):
 def create_executor(sql_select):
     if isinstance(sql_select.source, basestring):
         if sql_select.is_select_inside:
-            return LeafSelectInsideExecutor(sql_select)
+            return SelectInsideLeafExecutor(sql_select, search_es)
         else:
-            return LeafSelectFromExecutor(sql_select)
+            return SelectFromLeafExecutor(sql_select, search_es)
     elif in_mem_computation.is_in_mem_computation(sql_select):
-        return InMemExecutor(sql_select)
+        return SelectFromInMemExecutor(sql_select, create_executor(sql_select.source))
     else:
         if sql_select.is_select_inside:
-            return SelectInsideExecutor(sql_select)
+            return SelectInsideBranchExecutor(sql_select, create_executor(sql_select.source))
         else:
             return SelectFromExecutor(sql_select)
 
+def search_es(index, request):
+    if DEBUG:
+        print('=====')
+        print(json.dumps(request, indent=2))
+    url = ES_HOSTS + '/%s*/_search' % index
+    try:
+        resp = urllib2.urlopen(url, json.dumps(request)).read()
+    except urllib2.HTTPError as e:
+        sys.stderr.write(e.read())
+        return
+    except:
+        import traceback
 
-class InMemExecutor(object):
-    def __init__(self, sql_select):
-        self.sql_select = sql_select
-        self.inner_executor = create_executor(sql_select.source)
-        self.request = self.inner_executor.request
-
-    def execute(self):
-        response = self.inner_executor.execute(self.request)
-        return in_mem_computation.do_in_mem_computation(self.sql_select, response)
+        sys.stderr.write(traceback.format_exc())
+        return
+    response = json.loads(resp)
+    if DEBUG:
+        print('=====')
+        print(json.dumps(response, indent=2))
+    return response
 
 
-class LeafSelectInsideExecutor(object):
-    def __init__(self, sql_select):
-        self.sql_select = sql_select
-        self.request, self.select_response = translators.translate_select_inside(sql_select)
 
-    def execute(self):
-        if DEBUG:
-            print('=====')
-            print(json.dumps(self.request, indent=2))
-        url = ES_HOSTS + '/%s*/_search' % self.sql_select.source
-        try:
-            resp = urllib2.urlopen(url, json.dumps(self.request)).read()
-        except urllib2.HTTPError as e:
-            sys.stderr.write(e.read())
-            return
-        except:
-            import traceback
-
-            sys.stderr.write(traceback.format_exc())
-            return
-        response = json.loads(resp)
-        if DEBUG:
-            print('=====')
-            print(json.dumps(response, indent=2))
-        return self.select_response(response)
 
 
 class SelectInsideExecutor(object):
