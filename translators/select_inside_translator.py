@@ -40,7 +40,7 @@ class Translator(object):
         self.request['size'] = 0  # do not need hits in response
         reversed_group_by_names = list(reversed(self.sql_select.group_by.keys())) if self.sql_select.group_by else []
         self.add_aggs_to_request(reversed_group_by_names)
-        if isinstance(self.sql_select.select_from, basestring) and self.sql_select.where:
+        if isinstance(self.sql_select.source, basestring) and self.sql_select.where:
             self.request['query'] = filter_translator.create_compound_filter(self.sql_select.where.tokens[1:])
         if self.sql_select.order_by or self.sql_select.limit:
             if len(self.sql_select.group_by or {}) != 1:
@@ -140,7 +140,7 @@ class Translator(object):
 
     def append_global_agg(self, current_aggs):
         if self.sql_select.where:
-            if isinstance(self.sql_select.select_from, basestring):
+            if isinstance(self.sql_select.source, basestring):
                 filter = {}
             else:
                 filter = filter_translator.create_compound_filter(self.sql_select.where.tokens[1:])

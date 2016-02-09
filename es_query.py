@@ -10,6 +10,7 @@ import json
 
 import sqlparse
 from sqlparse.sql_select import SqlSelect
+from sqlparse import sql as stypes
 import in_mem_computation
 import translators
 import itertools
@@ -23,8 +24,7 @@ def execute_sql(es_hosts, sql):
 
     ES_HOSTS = es_hosts
     statement = sqlparse.parse(sql.strip())[0]
-    sql_select = SqlSelect()
-    sql_select.on_SELECT(statement.tokens)
+    sql_select = SqlSelect(statement.tokens)
     rows = create_executor(sql_select).execute()
     for row in rows:
         row.pop('_bucket_', None)
@@ -32,8 +32,11 @@ def execute_sql(es_hosts, sql):
 
 
 def create_executor(sql_select):
-    if isinstance(sql_select.select_from, basestring):
-        return LeafExecutor(sql_select)
+    if isinstance(sql_select.source, basestring):
+        if sql_select.is_select_inside:
+            return LeafSelectInsideExecutor(sql_select)
+        else:
+            return LeafSelectFromExecutor(sql_select)
     elif in_mem_computation.is_in_mem_computation(sql_select):
         return InMemExecutor(sql_select)
     else:
@@ -46,7 +49,7 @@ def create_executor(sql_select):
 class InMemExecutor(object):
     def __init__(self, sql_select):
         self.sql_select = sql_select
-        self.inner_executor = create_executor(sql_select.select_from)
+        self.inner_executor = create_executor(sql_select.source)
         self.request = self.inner_executor.request
 
     def execute(self):
@@ -54,7 +57,7 @@ class InMemExecutor(object):
         return in_mem_computation.do_in_mem_computation(self.sql_select, response)
 
 
-class LeafExecutor(object):
+class LeafSelectInsideExecutor(object):
     def __init__(self, sql_select):
         self.sql_select = sql_select
         self.request, self.select_response = translators.translate_select_inside(sql_select)
@@ -63,7 +66,7 @@ class LeafExecutor(object):
         if DEBUG:
             print('=====')
             print(json.dumps(self.request, indent=2))
-        url = ES_HOSTS + '/%s*/_search' % self.sql_select.select_from
+        url = ES_HOSTS + '/%s*/_search' % self.sql_select.source
         try:
             resp = urllib2.urlopen(url, json.dumps(self.request)).read()
         except urllib2.HTTPError as e:
@@ -86,7 +89,7 @@ class SelectInsideExecutor(object):
         self.sql_select = sql_select
         my_request, self.select_response = translators.translate_select_inside(sql_select)
         my_aggs = my_request['aggs']
-        self.inner_executor = create_executor(sql_select.select_from)
+        self.inner_executor = create_executor(sql_select.source)
         self.request = self.inner_executor.request
         inner_aggs = self.get_inner_aggs(self.request['aggs'], sql_select)
         for k in my_aggs.keys():
@@ -98,10 +101,10 @@ class SelectInsideExecutor(object):
         inner_aggs.update(my_aggs)
 
     def get_inner_aggs(self, aggs, sql_select):
-        if isinstance(sql_select.select_from, basestring):
+        if isinstance(sql_select.source, basestring):
             return aggs
         bucket_keys = []
-        for bucket_key in sql_select.select_from.get_bucket_keys():
+        for bucket_key in sql_select.source.get_bucket_keys():
             if '_global_' in aggs:
                 aggs = aggs['_global_']['aggs']
             aggs = aggs[bucket_key]['aggs']
@@ -116,7 +119,7 @@ class SelectFromExecutor(object):
     def __init__(self, sql_select):
         self.sql_select = sql_select
         parent_pipeline_aggs, sibling_pipeline_aggs = translators.translate_select_from(sql_select)
-        self.inner_executor = create_executor(sql_select.select_from)
+        self.inner_executor = create_executor(sql_select.source)
         self.request = self.inner_executor.request
         self.add_sibling_pipeline_aggs(sibling_pipeline_aggs)
         self.add_parent_pipeline_aggs(parent_pipeline_aggs)
@@ -125,7 +128,7 @@ class SelectFromExecutor(object):
         if not parent_pipeline_aggs:
             return
         aggs = self.request['aggs']
-        for bucket_key in self.sql_select.select_from.group_by.keys():
+        for bucket_key in self.sql_select.source.group_by.keys():
             if '_global_' in aggs:
                 aggs = aggs['_global_']['aggs']
             aggs = aggs[bucket_key]['aggs']

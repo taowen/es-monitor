@@ -8,7 +8,7 @@ import functools
 
 def translate_select_from(sql_select):
     if sql_select.where:
-        parent_pipeline_aggs = having_translator.translate_having(sql_select.select_from, sql_select.where.tokens[1:])
+        parent_pipeline_aggs = having_translator.translate_having(sql_select.source, sql_select.where.tokens[1:])
     else:
         parent_pipeline_aggs = None
     sibling_pipeline_aggs = translate_projections(sql_select)
@@ -31,8 +31,8 @@ def translate_function(sql_select, projection_name, sql_function):
     params = sql_function.get_parameters()
     if 'SUM' == sql_function_name:
         projection_name = params[0].get_name()
-        projection = sql_select.select_from.projections.get(projection_name)
-        bucket_key = sql_select.select_from.group_by.keys()[0]
+        projection = sql_select.source.projections.get(projection_name)
+        bucket_key = sql_select.source.group_by.keys()[0]
         buckets_path = '%s.%s' % (
             bucket_key, '_count' if having_translator.is_count_star(projection) else projection.get_name())
         return {'sum_bucket': {'buckets_path': buckets_path}}

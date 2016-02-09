@@ -5,8 +5,8 @@ from sqlparse.ordereddict import OrderedDict
 
 # make the result of sqlparse more usable
 class SqlSelect(object):
-    def __init__(self):
-        self.select_from = None
+    def __init__(self, tokens):
+        self.source = None
         self.projections = {}
         self.group_by = OrderedDict()
         self.order_by = []
@@ -14,18 +14,22 @@ class SqlSelect(object):
         self.having = []
         self.where = None
         self.is_select_inside = False
+        self.on_SELECT(tokens)
+        if isinstance(self.source, basestring):
+            if self.group_by or self.has_function_projection():
+                self.is_select_inside = True
 
     def get_bucket_keys(self):
-        if isinstance(self.select_from, basestring):
+        if isinstance(self.source, basestring):
             return self.group_by.keys()
         else:
-            return self.group_by.keys() + self.select_from.get_bucket_keys()
+            return self.group_by.keys() + self.source.get_bucket_keys()
 
     def on_SELECT(self, tokens):
         if not (ttypes.DML == tokens[0].ttype and 'SELECT' == tokens[0].value.upper()):
             raise Exception('it is not SELECT: %s' % tokens[0])
         idx = 1
-        from_found = False
+        source_found = False
         while idx < len(tokens):
             token = tokens[idx]
             idx += 1
@@ -34,7 +38,7 @@ class SqlSelect(object):
             if ttypes.Keyword == token.ttype:
                 if token.value.upper() in ('FROM', 'INSIDE'):
                     self.is_select_inside = 'INSIDE' == token.value.upper()
-                    from_found = True
+                    source_found = True
                     idx = self.on_FROM(tokens, idx)
                     continue
                 elif 'GROUP' == token.value.upper():
@@ -53,7 +57,7 @@ class SqlSelect(object):
                     raise Exception('unexpected: %s' % repr(token))
             elif isinstance(token, stypes.Where):
                 self.on_WHERE(token)
-            elif not from_found:
+            elif not source_found:
                 self.set_projections(token)
                 continue
             else:
@@ -78,12 +82,11 @@ class SqlSelect(object):
             if token.ttype in (ttypes.Whitespace, ttypes.Comment):
                 continue
             if isinstance(token, stypes.Identifier):
-                self.select_from = token.get_name()
+                self.source = token.get_name()
                 break
             elif isinstance(token, stypes.Parenthesis):
-                self.select_from = SqlSelect()
-                select_from = sqlparse.parse(token.value[1:-1].strip())[0]
-                self.select_from.on_SELECT(select_from.tokens)
+                source = sqlparse.parse(token.value[1:-1].strip())[0]
+                self.source = SqlSelect(source.tokens)
                 break
             else:
                 raise Exception('unexpected: %s' % repr(token))
@@ -169,3 +172,12 @@ class SqlSelect(object):
 
     def on_WHERE(self, where):
         self.where = where
+
+
+    def has_function_projection(self):
+        for projection in self.projections.values():
+            if isinstance(projection, stypes.Identifier):
+                projection = projection.tokens[0]
+            if isinstance(projection, stypes.Function):
+                return True
+        return False
