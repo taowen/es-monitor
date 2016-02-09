@@ -101,10 +101,9 @@ class SelectInsideExecutor(object):
         if isinstance(sql_select.select_from, basestring):
             return aggs
         bucket_keys = []
-        for keys in sql_select.select_from.get_bucket_keys_levels():
-            bucket_keys.append('_global_')
-            bucket_keys.extend(keys)
-        for bucket_key in bucket_keys:
+        for bucket_key in sql_select.select_from.get_bucket_keys():
+            if '_global_' in aggs:
+                aggs = aggs['_global_']['aggs']
             aggs = aggs[bucket_key]['aggs']
         return aggs
 
@@ -116,22 +115,30 @@ class SelectInsideExecutor(object):
 class SelectFromExecutor(object):
     def __init__(self, sql_select):
         self.sql_select = sql_select
-        parent_pipeline_agg, sibling_pipeline_agg = translators.translate_select_from(sql_select)
+        parent_pipeline_aggs, sibling_pipeline_aggs = translators.translate_select_from(sql_select)
         self.inner_executor = create_executor(sql_select.select_from)
         self.request = self.inner_executor.request
-        inner_aggs = self.get_inner_aggs(self.request['aggs'], sql_select)
-        inner_aggs.update(parent_pipeline_agg or {})
-        if sibling_pipeline_agg:
+        self.add_sibling_pipeline_aggs(sibling_pipeline_aggs)
+        self.add_parent_pipeline_aggs(parent_pipeline_aggs)
+
+    def add_parent_pipeline_aggs(self, parent_pipeline_aggs):
+        if not parent_pipeline_aggs:
+            return
+        aggs = self.request['aggs']
+        for bucket_key in self.sql_select.select_from.group_by.keys():
+            if '_global_' in aggs:
+                aggs = aggs['_global_']['aggs']
+            aggs = aggs[bucket_key]['aggs']
+        aggs.update(parent_pipeline_aggs or {})
+
+    def add_sibling_pipeline_aggs(self, sibling_pipeline_aggs):
+        if not sibling_pipeline_aggs:
+            return
+        if '_global_' in self.request['aggs']:
             if self.request['aggs']['_global_']['filter']:
                 raise Exception('sibling pipeline does not support filter aggregation yet')
             self.request['aggs'] = self.request['aggs']['_global_']['aggs']
-            self.request['aggs'].update(sibling_pipeline_agg)
-
-    def get_inner_aggs(self, aggs, sql_select):
-        aggs = aggs['_global_']['aggs']
-        top_most_bucket_key = sql_select.get_bucket_keys_levels()[-1][-1]
-        aggs = aggs[top_most_bucket_key]['aggs']
-        return aggs
+        self.request['aggs'].update(sibling_pipeline_aggs)
 
     def execute(self):
         response = self.inner_executor.execute()

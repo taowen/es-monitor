@@ -31,14 +31,10 @@ def translate_function(sql_select, projection_name, sql_function):
     params = sql_function.get_parameters()
     if 'SUM' == sql_function_name:
         projection_name = params[0].get_name()
-        bucket_keys_levels, projection = sql_select.get_inside_projection(projection_name)
-        bucket_keys_levels[0] = bucket_keys_levels[0][1:]
-        buckets_path = '>'.join(['>'.join(level) for level in bucket_keys_levels])
-        if buckets_path:
-            buckets_path = '%s.%s' % (
-                buckets_path, '_count' if having_translator.is_count_star(projection) else projection.get_name())
-        else:
-            buckets_path = projection.get_name()
+        projection = sql_select.select_from.projections.get(projection_name)
+        bucket_key = sql_select.select_from.group_by.keys()[0]
+        buckets_path = '%s.%s' % (
+            bucket_key, '_count' if having_translator.is_count_star(projection) else projection.get_name())
         return {'sum_bucket': {'buckets_path': buckets_path}}
     else:
         raise Exception('unsupported function: %s' % sql_function_name)

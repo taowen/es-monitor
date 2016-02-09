@@ -58,23 +58,30 @@ class Translator(object):
 
     def select_aggregation_response(self, response):
         group_by_names = self.sql_select.group_by.keys() if self.sql_select.group_by else []
-        rows = []
+        buckets = []
         if isinstance(response, list):
             for inner_row in response:
                 bucket = inner_row.pop('_bucket_')
+                buckets.append((bucket, inner_row))
         else:
             bucket = response['aggregations']
-        if '_global_' in bucket:
-            bucket = bucket['_global_']
-        else:
-            sibling_keys = set(bucket.keys()) - set(group_by_names)
+            buckets.append((bucket, {}))
+        all_rows = []
+        for bucket, inner_row in buckets:
+            rows = []
             sibling = {}
-            for sibling_key in sibling_keys:
-                sibling[sibling_key] = bucket[sibling_key]['value']
+            if '_global_' in bucket:
+                bucket = bucket['_global_']
+            else:
+                sibling_keys = set(bucket.keys()) - set(group_by_names)
+                for sibling_key in sibling_keys:
+                    sibling[sibling_key] = bucket[sibling_key]['value']
             self.collect_records(rows, bucket, group_by_names, {})
             for row in rows:
                 row.update(sibling)
-        return rows
+                row.update(inner_row)
+            all_rows.extend(rows)
+        return all_rows
 
     def add_aggs_to_request(self, group_by_names):
         current_aggs = {'aggs': {}}

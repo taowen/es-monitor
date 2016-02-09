@@ -82,6 +82,7 @@ select pivot(errno, value) from (
 
 TODO
 
+* execute with: inside_aggs, parent_aggs, sibling_aggs
 * support output=None, support inputs[-1]
 * support parent pipeline aggregation at metric level: derivative, difference, moving average, cumulative sum
 * in memory computation support where, group by
