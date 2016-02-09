@@ -82,11 +82,12 @@ select pivot(errno, value) from (
 
 TODO
 
-* execute with: inside_aggs, parent_aggs, sibling_aggs
-* support output=None, support inputs[-1]
-* support parent pipeline aggregation at metric level: derivative, difference, moving average, cumulative sum
-* in memory computation support where, group by
+* pull up select inside executor
+* select from per bucket
 * support bucket script
+* support parent pipeline aggregation at metric level: derivative, difference, moving average, cumulative sum
+* named filter agg (not _global_)
+* support output=None, support inputs[-1]
+* in memory computation support where, group by
 * histogram aggregation
-* ``` SELECT user, MAX(value) FROM (SELECT user, COUNT(*) AS value FROM index GROUP BY user)```
 * client side join

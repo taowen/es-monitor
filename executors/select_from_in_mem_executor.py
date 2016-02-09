@@ -2,6 +2,8 @@ import in_mem_computation
 
 
 class SelectFromInMemExecutor(object):
+    is_in_mem_computation = in_mem_computation.is_in_mem_computation
+
     def __init__(self, sql_select, inner_executor):
         self.sql_select = sql_select
         self.inner_executor = inner_executor
