@@ -52,7 +52,7 @@ class SelectInsideExecutor(object):
                 bucket = bucket['_global_']
             sibling_keys = set(bucket.keys()) - set(group_by_names)
             for sibling_key in sibling_keys:
-                if isinstance(bucket[sibling_key], dict):
+                if isinstance(bucket[sibling_key], dict) and 'value' in bucket[sibling_key]:
                     sibling[sibling_key] = bucket[sibling_key]['value']
             self.collect_records(rows, bucket, group_by_names, {})
             for row in rows:

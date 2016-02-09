@@ -8,10 +8,16 @@ class SelectFromAllBucketsExecutor(object):
     def __init__(self, sql_select, inner_executor):
         self.sql_select = sql_select
         self.inner_executor = inner_executor
-        self.sibling_pipeline_aggs = self.build_request()
+        self.sibling_pipeline_aggs = self.build_sibling_pipeline_aggs()
+        self.parent_pipeline_aggs = self.build_parent_pipeline_aggs()
 
     def execute(self):
-        response = self.inner_executor.execute(sibling_pipeline_aggs=self.sibling_pipeline_aggs)
+        if self.sql_select.group_by or self.sql_select.having \
+                or self.sql_select.order_by or self.sql_select.limit:
+            raise Exception('select from all buckets is select only')
+        response = self.inner_executor.execute(
+                sibling_pipeline_aggs=self.sibling_pipeline_aggs,
+                parent_pipeline_aggs=self.parent_pipeline_aggs)
         return response
 
     @classmethod
@@ -23,7 +29,7 @@ class SelectFromAllBucketsExecutor(object):
                     return True
         return False
 
-    def build_request(self):
+    def build_sibling_pipeline_aggs(self):
         sibling_pipeline_aggs = {}
         for projection_name, projection in self.sql_select.projections.iteritems():
             if not isinstance(projection, stypes.Function):
@@ -35,6 +41,8 @@ class SelectFromAllBucketsExecutor(object):
                 projection = inner_most.projections.get(params[0].get_name())
                 bucket_key = '>'.join(inner_most.group_by.keys())
                 metric_name = '_count' if having_translator.is_count_star(projection) else projection.get_name()
+                if not bucket_key:
+                    raise Exception('select from all buckets must nested with group by')
                 buckets_path = '%s.%s' % (bucket_key, metric_name)
                 sibling_pipeline_aggs[projection_name] = {
                     '%s_bucket' % sql_func_name.lower(): {'buckets_path': buckets_path}
@@ -42,3 +50,20 @@ class SelectFromAllBucketsExecutor(object):
             else:
                 raise Exception('unexpected: %s' % repr(projection))
         return sibling_pipeline_aggs
+
+    def build_parent_pipeline_aggs(self):
+        if not self.sql_select.where:
+            return {}
+        inner_most = self.sql_select.inner_most
+        current_sql_select = self.sql_select.source
+        variables = {}
+        while current_sql_select != inner_most:
+            for variable_name in variables.keys():
+                variables[variable_name] = '_global_>%s' % variables[variable_name]
+            for variable_name, projection in current_sql_select.projections.iteritems():
+                if having_translator.is_count_star(projection):
+                    variables[variable_name] = '_global_._count'
+                else:
+                    variables[variable_name] = '_global_.%s' % variable_name
+            current_sql_select = current_sql_select.source
+        return having_translator.translate_having(inner_most, self.sql_select.where.tokens[1:], variables)
