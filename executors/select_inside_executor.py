@@ -5,6 +5,7 @@ from translators import filter_translator
 from translators import having_translator
 from translators import sort_translator
 from translators import metric_translator
+from merge_aggs import merge_aggs
 
 
 class SelectInsideExecutor(object):
@@ -71,19 +72,21 @@ class SelectInsideExecutor(object):
         if group_by_names:
             for group_by_name in group_by_names:
                 group_by = self.sql_select.group_by.get(group_by_name)
-                if group_by.tokens[0].ttype in (ttypes.Name, ttypes.String.Symbol):
-                    current_aggs = self.append_terms_agg(current_aggs, group_by_name)
+                if isinstance(group_by, stypes.Identifier):
+                    group_by = group_by.tokens[0]
+                if group_by.ttype in (ttypes.Name, ttypes.String.Symbol):
+                    current_aggs = self.append_terms_aggs(current_aggs, group_by_name)
+                elif isinstance(group_by, stypes.Parenthesis):
+                    current_aggs = self.append_range_aggs(current_aggs, group_by, group_by_name)
+                elif isinstance(group_by, stypes.Function):
+                    current_aggs = self.append_date_histogram_aggs(current_aggs, group_by, group_by_name)
+                elif isinstance(group_by, stypes.Where):
+                    current_aggs = self.append_filter_aggs(current_aggs, group_by)
                 else:
-                    if isinstance(group_by.tokens[0], stypes.Parenthesis):
-                        current_aggs = self.append_range_agg(current_aggs, group_by, group_by_name)
-                    elif isinstance(group_by.tokens[0], stypes.Function):
-                        current_aggs = self.append_date_histogram_agg(current_aggs, group_by, group_by_name)
-                    else:
-                        raise Exception('unexpected: %s' % repr(group_by.tokens[0]))
-        current_aggs = self.append_global_agg(current_aggs)
+                    raise Exception('unexpected: %s' % repr(group_by))
         self.request.update(current_aggs)
 
-    def append_terms_agg(self, current_aggs, group_by_name):
+    def append_terms_aggs(self, current_aggs, group_by_name):
         current_aggs = {
             'aggs': {group_by_name: dict(current_aggs, **{
                 'terms': {'field': group_by_name, 'size': 0}
@@ -91,7 +94,7 @@ class SelectInsideExecutor(object):
         }
         return current_aggs
 
-    def append_date_histogram_agg(self, current_aggs, group_by, group_by_name):
+    def append_date_histogram_aggs(self, current_aggs, group_by, group_by_name):
         date_format = None
         if 'to_char' == group_by.tokens[0].get_name():
             to_char_params = list(group_by.tokens[0].get_parameters())
@@ -117,22 +120,16 @@ class SelectInsideExecutor(object):
             raise Exception('unexpected: %s' % repr(sql_function))
         return current_aggs
 
-    def append_global_agg(self, current_aggs):
-        if self.sql_select.where:
-            if isinstance(self.sql_select.source, basestring):
-                return current_aggs
-            else:
-                filter = filter_translator.create_compound_filter(self.sql_select.where.tokens[1:])
-                current_aggs = {
-                    'aggs': {'_global_': dict(current_aggs, **{
-                        'filter': filter
-                    })}
-                }
-                return current_aggs
-        else:
-            return current_aggs
+    def append_filter_aggs(self, current_aggs, where):
+        filter = filter_translator.create_compound_filter(where.tokens[1:])
+        current_aggs = {
+            'aggs': {self.sql_select.filter_bucket_key: dict(current_aggs, **{
+                'filter': filter
+            })}
+        }
+        return current_aggs
 
-    def append_range_agg(self, current_aggs, group_by, group_by_name):
+    def append_range_aggs(self, current_aggs, group_by, group_by_name):
         tokens = group_by.tokens[0].tokens[1:-1]
         if len(tokens) == 1 and isinstance(tokens[0], stypes.Case):
             case_when = tokens[0]
@@ -147,20 +144,63 @@ class SelectInsideExecutor(object):
     def collect_records(self, rows, parent_bucket, group_by_names, props):
         if group_by_names:
             current_response = parent_bucket[group_by_names[0]]
-            child_buckets = current_response['buckets']
-            if isinstance(child_buckets, dict):
-                for child_bucket_key, child_bucket in child_buckets.iteritems():
-                    child_props = dict(props, **{group_by_names[0]: child_bucket_key})
-                    self.collect_records(rows, child_bucket, group_by_names[1:], child_props)
+            if 'buckets' in current_response:
+                child_buckets = current_response['buckets']
+                if isinstance(child_buckets, dict):
+                    for child_bucket_key, child_bucket in child_buckets.iteritems():
+                        child_props = dict(props, **{group_by_names[0]: child_bucket_key})
+                        self.collect_records(rows, child_bucket, group_by_names[1:], child_props)
+                else:
+                    for child_bucket in child_buckets:
+                        child_bucket_key = child_bucket['key_as_string'] if 'key_as_string' in child_bucket else \
+                            child_bucket['key']
+                        child_props = dict(props, **{group_by_names[0]: child_bucket_key})
+                        self.collect_records(rows, child_bucket, group_by_names[1:], child_props)
             else:
-                for child_bucket in child_buckets:
-                    child_bucket_key = child_bucket['key_as_string'] if 'key_as_string' in child_bucket else \
-                        child_bucket['key']
-                    child_props = dict(props, **{group_by_names[0]: child_bucket_key})
-                    self.collect_records(rows, child_bucket, group_by_names[1:], child_props)
+                self.collect_records(rows, current_response, group_by_names[1:], props)
         else:
             record = props
             for metric_name, get_metric in self.metric_selector.iteritems():
                 record[metric_name] = get_metric(parent_bucket)
             record['_bucket_'] = parent_bucket
             rows.append(record)
+
+
+class SelectInsideBranchExecutor(SelectInsideExecutor):
+    def __init__(self, sql_select, inner_executor):
+        super(SelectInsideBranchExecutor, self).__init__(sql_select)
+        self.inner_executor = inner_executor
+
+    def execute(self, inside_aggs=None, parent_pipeline_aggs=None, sibling_pipeline_aggs=None):
+        next_level_sibling_pipeline_aggs = None
+        next_level_parent_pipeline_aggs = None
+        if self.sql_select.source.is_select_inside:
+            next_level_sibling_pipeline_aggs = sibling_pipeline_aggs
+            sibling_pipeline_aggs = None
+            next_level_parent_pipeline_aggs = parent_pipeline_aggs
+            parent_pipeline_aggs = None
+        merge_aggs(
+                self.sql_select, self.request['aggs'],
+                inside_aggs=inside_aggs,
+                parent_pipeline_aggs=parent_pipeline_aggs,
+                sibling_pipeline_aggs=sibling_pipeline_aggs)
+        response = self.inner_executor.execute(
+                inside_aggs=self.request['aggs'],
+                sibling_pipeline_aggs=next_level_sibling_pipeline_aggs,
+                parent_pipeline_aggs=next_level_parent_pipeline_aggs)
+        return self.select_response(response)
+
+
+class SelectInsideLeafExecutor(SelectInsideExecutor):
+    def __init__(self, sql_select, search_es):
+        super(SelectInsideLeafExecutor, self).__init__(sql_select)
+        self.search_es = search_es
+
+    def execute(self, inside_aggs=None, parent_pipeline_aggs=None, sibling_pipeline_aggs=None):
+        merge_aggs(
+                self.sql_select, self.request['aggs'],
+                inside_aggs=inside_aggs,
+                parent_pipeline_aggs=parent_pipeline_aggs,
+                sibling_pipeline_aggs=sibling_pipeline_aggs)
+        response = self.search_es(self.sql_select.source, self.request)
+        return self.select_response(response)

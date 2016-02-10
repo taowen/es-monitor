@@ -6,7 +6,12 @@ from sqlparse.ordereddict import OrderedDict
 
 # make the result of sqlparse more usable
 class SqlSelect(object):
+
+    CURRENT_FILTER_INDEX = 1
+
     def __init__(self, tokens):
+        self.filter_bucket_key = 'filter%s' % SqlSelect.CURRENT_FILTER_INDEX
+        SqlSelect.CURRENT_FILTER_INDEX += 1
         self.source = None
         self.projections = {}
         self.group_by = OrderedDict()
@@ -19,6 +24,14 @@ class SqlSelect(object):
         if isinstance(self.source, basestring):
             if self.group_by or self.has_function_projection():
                 self.is_select_inside = True
+        else:
+            if self.is_select_inside and self.where:
+                old_group_by = self.group_by
+                self.group_by = OrderedDict()
+                self.group_by[self.filter_bucket_key] = self.where
+                for key in old_group_by.keys():
+                    self.group_by[key] = old_group_by[key]
+                self.where = None
 
     @property
     def inner_most(self):
@@ -27,12 +40,6 @@ class SqlSelect(object):
         if self.is_select_inside and not self.source.is_select_inside:
             return self
         return self.source.inner_most
-
-    def get_bucket_keys(self):
-        if isinstance(self.source, basestring):
-            return self.group_by.keys()
-        else:
-            return self.group_by.keys() + self.source.get_bucket_keys()
 
     def on_SELECT(self, tokens):
         if not (ttypes.DML == tokens[0].ttype and 'SELECT' == tokens[0].value.upper()):
