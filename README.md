@@ -82,7 +82,6 @@ select pivot(errno, value) from (
 
 TODO
 
-* pull up select inside executor
 * select from per bucket
 * support bucket script
 * support parent pipeline aggregation at metric level: derivative, difference, moving average, cumulative sum

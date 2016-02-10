@@ -2,7 +2,7 @@ from sqlparse import sql as stypes
 from sqlparse import tokens as ttypes
 from translators import case_when_translator
 from translators import filter_translator
-from translators import having_translator
+from translators import script_translator
 from translators import sort_translator
 from translators import metric_translator
 from merge_aggs import merge_aggs
@@ -19,8 +19,6 @@ class SelectInsideExecutor(object):
         self.request['size'] = 0  # do not need hits in response
         reversed_group_by_names = list(reversed(self.sql_select.group_by.keys())) if self.sql_select.group_by else []
         self.add_aggs_to_request(reversed_group_by_names)
-        if isinstance(self.sql_select.source, basestring) and self.sql_select.where:
-            self.request['query'] = filter_translator.create_compound_filter(self.sql_select.where.tokens[1:])
         if self.sql_select.order_by or self.sql_select.limit:
             if len(self.sql_select.group_by or {}) != 1:
                 raise Exception('order by can only be applied on single group by')
@@ -37,15 +35,7 @@ class SelectInsideExecutor(object):
 
     def select_response(self, response):
         group_by_names = self.sql_select.group_by.keys() if self.sql_select.group_by else []
-        buckets = []
-        if isinstance(response, list):
-            for inner_row in response:
-                bucket = inner_row.pop('_bucket_')
-                buckets.append((bucket, inner_row))
-        else:
-            bucket = response.get('aggregations', {})
-            bucket['doc_count'] = response['hits']['total']
-            buckets.append((bucket, {}))
+        buckets = self.select_buckets(response)
         all_rows = []
         for bucket, inner_row in buckets:
             rows = []
@@ -61,12 +51,17 @@ class SelectInsideExecutor(object):
             all_rows.extend(rows)
         return all_rows
 
+    def select_buckets(self, response):
+        raise Exception('base class')
+
     def add_aggs_to_request(self, group_by_names):
         current_aggs = {'aggs': {}}
         if self.metric_request:
             current_aggs = {'aggs': self.metric_request}
         if self.sql_select.having:
-            current_aggs['aggs'].update(having_translator.translate_having(self.sql_select, self.sql_select.having))
+            current_aggs['aggs']['having'] = {
+                'bucket_selector': script_translator.translate_script(self.sql_select, self.sql_select.having)
+            }
         if group_by_names:
             for group_by_name in group_by_names:
                 group_by = self.sql_select.group_by.get(group_by_name)
@@ -158,6 +153,9 @@ class SelectInsideExecutor(object):
                 self.collect_records(rows, current_response, group_by_names[1:], props)
         else:
             record = props
+            for key, value in parent_bucket.iteritems():
+                if isinstance(value, dict) and 'value' in value:
+                    record[key] = value['value']
             for metric_name, get_metric in self.metric_selector.iteritems():
                 record[metric_name] = get_metric(parent_bucket)
             record['_bucket_'] = parent_bucket
@@ -188,6 +186,14 @@ class SelectInsideBranchExecutor(SelectInsideExecutor):
                 parent_pipeline_aggs=next_level_parent_pipeline_aggs)
         return self.select_response(response)
 
+    def select_buckets(self, response):
+        # response is selected from inner executor
+        buckets = []
+        for inner_row in response:
+            bucket = inner_row.pop('_bucket_')
+            buckets.append((bucket, inner_row))
+        return buckets
+
 
 class SelectInsideLeafExecutor(SelectInsideExecutor):
     def __init__(self, sql_select, search_es):
@@ -202,3 +208,16 @@ class SelectInsideLeafExecutor(SelectInsideExecutor):
                 sibling_pipeline_aggs=sibling_pipeline_aggs)
         response = self.search_es(self.sql_select.source, self.request)
         return self.select_response(response)
+
+    def build_request(self):
+        super(SelectInsideLeafExecutor, self).build_request()
+        if self.sql_select.where:
+            self.request['query'] = filter_translator.create_compound_filter(self.sql_select.where.tokens[1:])
+
+    def select_buckets(self, response):
+        # response is returned from elasticsearch
+        buckets = []
+        bucket = response.get('aggregations', {})
+        bucket['doc_count'] = response['hits']['total']
+        buckets.append((bucket, {}))
+        return buckets

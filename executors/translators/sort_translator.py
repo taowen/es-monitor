@@ -1,4 +1,4 @@
-import having_translator
+import script_translator
 
 
 def translate_sort(sql_select, agg=None):
@@ -10,7 +10,7 @@ def translate_sort(sql_select, agg=None):
         projection = sql_select.projections.get(id.get_name())
         if not projection:
             raise Exception('can only sort on selected field: %s' % id.get_name())
-        if having_translator.is_count_star(projection):
+        if script_translator.is_count_star(projection):
             sort.append({'_count': asc_or_desc})
         elif agg and id.get_name() == agg[0]:
             if 'terms' == agg[1]:

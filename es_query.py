@@ -10,6 +10,7 @@ import urllib2
 
 import sqlparse
 from executors import SelectFromAllBucketsExecutor
+from executors import SelectFromPerBucketExecutor
 from executors import SelectFromInMemExecutor
 from executors import SelectFromLeafExecutor
 from executors import SelectInsideBranchExecutor
@@ -46,7 +47,7 @@ def create_executor(sql_select):
         elif SelectFromAllBucketsExecutor.is_select_from_all_buckets(sql_select):
             return SelectFromAllBucketsExecutor(sql_select, create_executor(sql_select.source))
         else:
-            raise Exception('not implemented')
+            return SelectFromPerBucketExecutor(sql_select, create_executor(sql_select.source))
 
 
 def search_es(index, request):
