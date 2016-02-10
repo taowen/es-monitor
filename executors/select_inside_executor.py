@@ -42,7 +42,8 @@ class SelectInsideExecutor(object):
                 bucket = inner_row.pop('_bucket_')
                 buckets.append((bucket, inner_row))
         else:
-            bucket = response['aggregations']
+            bucket = response.get('aggregations', {})
+            bucket['doc_count'] = response['hits']['total']
             buckets.append((bucket, {}))
         all_rows = []
         for bucket, inner_row in buckets:
@@ -119,17 +120,17 @@ class SelectInsideExecutor(object):
     def append_global_agg(self, current_aggs):
         if self.sql_select.where:
             if isinstance(self.sql_select.source, basestring):
-                filter = {}
+                return current_aggs
             else:
                 filter = filter_translator.create_compound_filter(self.sql_select.where.tokens[1:])
+                current_aggs = {
+                    'aggs': {'_global_': dict(current_aggs, **{
+                        'filter': filter
+                    })}
+                }
+                return current_aggs
         else:
-            filter = {}
-        current_aggs = {
-            'aggs': {'_global_': dict(current_aggs, **{
-                'filter': filter
-            })}
-        }
-        return current_aggs
+            return current_aggs
 
     def append_range_agg(self, current_aggs, group_by, group_by_name):
         tokens = group_by.tokens[0].tokens[1:-1]

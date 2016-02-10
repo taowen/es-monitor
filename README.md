@@ -82,6 +82,7 @@ select pivot(errno, value) from (
 
 TODO
 
+* support select inside filter
 * pull up select inside executor
 * select from per bucket
 * support bucket script
