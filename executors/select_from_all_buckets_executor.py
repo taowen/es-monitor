@@ -58,12 +58,13 @@ class SelectFromAllBucketsExecutor(object):
         current_sql_select = self.sql_select.source
         variables = {}
         while current_sql_select != inner_most:
+            bucket_path = '>'.join(current_sql_select.group_by.keys())
             for variable_name in variables.keys():
-                variables[variable_name] = '_global_>%s' % variables[variable_name]
+                variables[variable_name] = '%s>%s' % (bucket_path, variables[variable_name])
             for variable_name, projection in current_sql_select.projections.iteritems():
                 if having_translator.is_count_star(projection):
-                    variables[variable_name] = '_global_._count'
+                    variables[variable_name] = '%s._count' % bucket_path
                 else:
-                    variables[variable_name] = '_global_.%s' % variable_name
+                    variables[variable_name] = '%s.%s' % (bucket_path, variable_name)
             current_sql_select = current_sql_select.source
         return having_translator.translate_having(inner_most, self.sql_select.where.tokens[1:], variables)

@@ -82,12 +82,10 @@ select pivot(errno, value) from (
 
 TODO
 
-* support select inside filter
 * pull up select inside executor
 * select from per bucket
 * support bucket script
 * support parent pipeline aggregation at metric level: derivative, difference, moving average, cumulative sum
-* named filter agg (not _global_)
 * support output=None, support inputs[-1]
 * in memory computation support where, group by
 * histogram aggregation
