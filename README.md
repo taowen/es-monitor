@@ -82,9 +82,6 @@ select pivot(errno, value) from (
 
 TODO
 
-* select from per bucket
-* support bucket script
-* support parent pipeline aggregation at metric level: derivative, difference, moving average, cumulative sum
 * support output=None, support inputs[-1]
 * in memory computation support where, group by
 * histogram aggregation

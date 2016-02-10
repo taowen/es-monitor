@@ -94,8 +94,8 @@ class SelectInsideExecutor(object):
             sql_function = to_char_params[0]
             date_format = eval(to_char_params[1].value)
         else:
-            sql_function = group_by.tokens[0]
-        if 'date_trunc' == sql_function.get_name():
+            sql_function = group_by
+        if 'date_trunc' == sql_function.tokens[0].get_name():
             parameters = tuple(sql_function.get_parameters())
             interval, field = parameters
             current_aggs = {

@@ -15,13 +15,31 @@ class SelectFromPerBucketExecutor(object):
                     include_sub_aggregation=True)
             self.parent_pipeline_aggs['having'] = {'bucket_selector': bucket_selector_agg}
         for projection_name, projection in sql_select.projections.iteritems():
-            tokens = projection.tokens
-            if isinstance(tokens[0], stypes.Parenthesis):
-                tokens = tokens[0].tokens[1:-1]
-            bucket_script_agg = script_translator.translate_script(
-                    sql_select, tokens,
-                    include_sub_aggregation=True)
-            self.parent_pipeline_aggs[projection_name] = {'bucket_script': bucket_script_agg}
+            if isinstance(projection, stypes.Function):
+                sql_function_name = projection.tokens[0].get_name().lower()
+                params = list(projection.get_parameters())
+                buckets_path = params[0].value
+                if 'serial_diff' == sql_function_name:
+                    self.parent_pipeline_aggs[projection_name] = {
+                        sql_function_name: {'buckets_path': buckets_path, 'lag': eval(params[1].value)}}
+                elif 'moving_avg' == sql_function_name:
+                    if len(params) == 2:
+                        moving_avg = eval(eval(params[1].value))
+                    else:
+                        moving_avg = {}
+                    moving_avg['buckets_path'] = buckets_path
+                    self.parent_pipeline_aggs[projection_name] = {sql_function_name: moving_avg}
+                else:
+                    self.parent_pipeline_aggs[projection_name] = {
+                        sql_function_name: {'buckets_path': buckets_path}}
+            else:
+                tokens = projection.tokens
+                if isinstance(tokens[0], stypes.Parenthesis):
+                    tokens = tokens[0].tokens[1:-1]
+                bucket_script_agg = script_translator.translate_script(
+                        sql_select, tokens,
+                        include_sub_aggregation=True)
+                self.parent_pipeline_aggs[projection_name] = {'bucket_script': bucket_script_agg}
 
     def execute(self):
         if self.sql_select.group_by or self.sql_select.where \
