@@ -84,5 +84,4 @@ TODO
 
 * support output=None, support inputs[-1]
 * in memory computation support where, group by
-* histogram aggregation
 * client side join

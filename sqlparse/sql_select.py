@@ -152,17 +152,18 @@ class SqlSelect(object):
                 continue
             self.group_by = OrderedDict()
             if isinstance(token, stypes.IdentifierList):
-                for id in token.get_identifiers():
-                    if ttypes.Keyword == id.ttype:
-                        raise Exception('%s is keyword' % id.value)
-                    elif isinstance(id, stypes.Identifier):
-                        self.group_by[id.get_name()] = id
-                    else:
-                        raise Exception('unexpected: %s' % repr(id))
+                ids = list(token.get_identifiers())
             elif isinstance(token, stypes.Identifier):
-                self.group_by[token.get_name()] = token
+                ids = [token]
             else:
                 raise Exception('unexpected: %s' % repr(token))
+            for id in ids:
+                if ttypes.Keyword == id.ttype:
+                    raise Exception('%s is keyword' % id.value)
+                elif isinstance(id, stypes.Identifier):
+                    self.group_by[id.get_name()] = id.tokens[0]
+                else:
+                    raise Exception('unexpected: %s' % repr(id))
             return idx
 
     def on_ORDER(self, tokens, idx):

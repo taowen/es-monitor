@@ -65,14 +65,18 @@ class SelectInsideExecutor(object):
         if group_by_names:
             for group_by_name in group_by_names:
                 group_by = self.sql_select.group_by.get(group_by_name)
-                if isinstance(group_by, stypes.Identifier):
-                    group_by = group_by.tokens[0]
                 if group_by.ttype in (ttypes.Name, ttypes.String.Symbol):
                     current_aggs = self.append_terms_aggs(current_aggs, group_by_name)
                 elif isinstance(group_by, stypes.Parenthesis):
                     current_aggs = self.append_range_aggs(current_aggs, group_by, group_by_name)
                 elif isinstance(group_by, stypes.Function):
-                    current_aggs = self.append_date_histogram_aggs(current_aggs, group_by, group_by_name)
+                    sql_function_name = group_by.tokens[0].get_name().upper()
+                    if sql_function_name in ('DATE_TRUNC', 'TO_CHAR'):
+                        current_aggs = self.append_date_histogram_aggs(current_aggs, group_by, group_by_name)
+                    elif 'HISTOGRAM' == sql_function_name:
+                        current_aggs = self.append_histogram_aggs(current_aggs, group_by, group_by_name)
+                    else:
+                        raise Exception('unsupported group by on %s' % sql_function_name)
                 elif isinstance(group_by, stypes.Where):
                     current_aggs = self.append_filter_aggs(current_aggs, group_by)
                 else:
@@ -111,6 +115,18 @@ class SelectInsideExecutor(object):
                 current_aggs['aggs'][group_by_name]['date_histogram']['format'] = date_format
         else:
             raise Exception('unexpected: %s' % repr(sql_function))
+        return current_aggs
+
+    def append_histogram_aggs(self, current_aggs, group_by, group_by_name):
+        parameters = tuple(group_by.get_parameters())
+        historgram = {'field': parameters[0].get_name(), 'interval': eval(parameters[1].value)}
+        if len(parameters) == 3:
+            historgram.update(eval(eval(parameters[2].value)))
+        current_aggs = {
+            'aggs': {group_by_name: dict(current_aggs, **{
+                'histogram': historgram
+            })}
+        }
         return current_aggs
 
     def append_filter_aggs(self, current_aggs, where):
