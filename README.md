@@ -84,4 +84,5 @@ TODO
 
 * support output=None, support inputs[-1]
 * in memory computation support where, group by
+* drill down to different direction (using COMBINE)
 * client side join
