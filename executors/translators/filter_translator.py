@@ -19,7 +19,7 @@ def create_compound_filter(tokens):
             elif isinstance(token, stypes.Parenthesis):
                 new_filter = create_compound_filter(token.tokens[1:-1])
             else:
-                raise Exception('unexpected: %s' % repr(token))
+                raise Exception('unexpected: %s' % token)
             if not logic_op and not current_filter:
                 current_filter = new_filter
             elif 'OR' == logic_op:
@@ -29,7 +29,7 @@ def create_compound_filter(tokens):
             elif 'NOT' == logic_op:
                 current_filter = {'bool': {'must_not': new_filter}}
             else:
-                raise Exception('unexpected: %s' % repr(token))
+                raise Exception('unexpected: %s' % token)
         elif ttypes.Keyword == token.ttype:
             if 'OR' == token.value.upper():
                 logic_op = 'OR'
@@ -40,15 +40,15 @@ def create_compound_filter(tokens):
                     raise Exception('unexpected: NOT')
                 logic_op = 'NOT'
             else:
-                raise Exception('unexpected: %s' % repr(token))
+                raise Exception('unexpected: %s' % token)
         else:
-            raise Exception('unexpected: %s' % repr(token))
+            raise Exception('unexpected: %s' % token)
     return current_filter
 
 
 def create_comparision_filter(token):
     if not isinstance(token, stypes.Comparison):
-        raise Exception('unexpected: %s' % repr(token))
+        raise Exception('unexpected: %s' % token)
     operator = token.token_next_by_type(0, ttypes.Comparison)
     if '>' == operator.value:
         return {'range': {token.left.get_name(): {'gt': eval_numeric_value(str(token.right))}}}
@@ -93,7 +93,7 @@ def eval_numeric_value(token):
         elif '-' == token_str[0]:
             return long(time.time() * long(1000)) - eval_timedelta(token_str[1:])
         else:
-            raise Exception('unexpected: %s' % repr(token))
+            raise Exception('unexpected: %s' % token)
     else:
         return float(token)
 

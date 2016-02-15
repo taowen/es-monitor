@@ -186,7 +186,8 @@ class _Lexer(object):
             (r'(@|##|#)[^\W\d_]\w+', tokens.Name),
             # IN is special, it may be followed by a parenthesis, but
             # is never a functino, see issue183
-            (r'in\b(?=[ (])?', tokens.Keyword),
+            (r'NOT\s+IN\b', tokens.Operator.Comparison),
+            (r'in\b(?=[ (])?', tokens.Comparison),
             (r'[^\W\d_]\w*(?=[.(])', tokens.Name),  # see issue39
             (r'[-]?0x[0-9a-fA-F]+', tokens.Number.Hexadecimal),
             (r'[-]?[0-9]*(\.[0-9]+)?[eE][-]?[0-9]+', tokens.Number.Float),
@@ -202,7 +203,10 @@ class _Lexer(object):
             (r'((LEFT\s+|RIGHT\s+|FULL\s+)?(INNER\s+|OUTER\s+|STRAIGHT\s+)?'
              r'|(CROSS\s+|NATURAL\s+)?)?JOIN\b', tokens.Keyword),
             (r'END(\s+IF|\s+LOOP|\s+WHILE)?\b', tokens.Keyword),
-            (r'NOT NULL\b', tokens.Keyword),
+            (r'IS\s+NOT\b', tokens.Operator.Comparison),
+            (r'IS\b', tokens.Operator.Comparison),
+            (r'LIKE\b', tokens.Operator.Comparison),
+            (r'NOT\s+LIKE\b', tokens.Operator.Comparison),
             (r'CREATE(\s+OR\s+REPLACE)?\b', tokens.Keyword.DDL),
             (r'DOUBLE\s+PRECISION\b', tokens.Name.Builtin),
             (r'(?<=\.)[^\W\d_]\w*', tokens.Name),

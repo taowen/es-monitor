@@ -140,10 +140,22 @@ def group_comparison(tlist):
                                 T.Name, T.Number, T.Number.Float,
                                 T.Number.Integer, T.Literal,
                                 T.Literal.Number.Integer, T.Name.Placeholder)
-                or isinstance(token, (sql.Identifier, sql.Parenthesis))
+                or isinstance(token, (sql.Identifier, sql.Parenthesis, sql.Function))
                 or (token.ttype is T.Keyword
                     and token.value.upper() in ['NULL', ]))
     _group_left_right(tlist, T.Operator.Comparison, None, sql.Comparison,
+                      check_left=_parts_valid, check_right=_parts_valid)
+
+
+def group_expression(tlist):
+
+    def _parts_valid(token):
+        return (token.ttype in (T.String.Symbol, T.String.Single,
+                                T.Name, T.Number, T.Number.Float,
+                                T.Number.Integer, T.Literal,
+                                T.Literal.Number.Integer, T.Name.Placeholder)
+                or isinstance(token, (sql.Identifier, sql.Parenthesis, sql.Function)))
+    _group_left_right(tlist, T.Operator, None, sql.Expression,
                       check_left=_parts_valid, check_right=_parts_valid)
 
 
@@ -453,6 +465,7 @@ def group(tlist):
             group_aliased,
             group_assignment,
             group_comparison,
+            group_expression,
             align_comments,
             group_identifier_list,
             group_if,

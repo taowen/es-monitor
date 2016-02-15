@@ -32,7 +32,7 @@ class CaseWhenNumericRangeTranslator(object):
             elif 'END' == token.value.upper():
                 break
             else:
-                raise Exception('unexpected: %s' % repr(token))
+                raise Exception('unexpected: %s' % token)
         return self.build()
 
     def on_WHEN(self, tokens, idx):
@@ -49,7 +49,7 @@ class CaseWhenNumericRangeTranslator(object):
             idx = skip_whitespace(tokens, idx + 1)
             token = tokens[idx]
         if 'THEN' != token.value.upper():
-            raise Exception('unexpected: %s' % repr(token))
+            raise Exception('unexpected: %s' % token)
         idx = skip_whitespace(tokens, idx + 1)
         token = tokens[idx]
         idx += 1
@@ -65,10 +65,10 @@ class CaseWhenNumericRangeTranslator(object):
             elif '<' == operator:
                 current_range['to'] = filter_translator.eval_numeric_value(str(token.right))
             else:
-                raise Exception('unexpected: %s' % repr(token))
+                raise Exception('unexpected: %s' % token)
             self.set_field(token.left.get_name())
         else:
-            raise Exception('unexpected: %s' % repr(token))
+            raise Exception('unexpected: %s' % token)
 
     def on_ELSE(self, tokens, idx):
         raise Exception('else is not supported')
@@ -111,7 +111,7 @@ class CaseWhenFiltersTranslator(object):
             elif 'END' == token.value.upper():
                 break
             else:
-                raise Exception('unexpected: %s' % repr(token))
+                raise Exception('unexpected: %s' % token)
         return self.build()
 
     def on_WHEN(self, tokens, idx):

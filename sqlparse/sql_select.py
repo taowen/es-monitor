@@ -33,6 +33,12 @@ class SqlSelect(object):
                     self.group_by[key] = old_group_by[key]
                 self.where = None
 
+    @classmethod
+    def parse(cls, *args, **kwargs):
+        statement = sqlparse.parse(*args, **kwargs)[0]
+        sql_select = SqlSelect(statement.tokens)
+        return sql_select
+
     @property
     def inner_most(self):
         if isinstance(self.source, basestring):
@@ -70,14 +76,14 @@ class SqlSelect(object):
                     idx = self.on_HAVING(tokens, idx)
                     continue
                 else:
-                    raise Exception('unexpected: %s' % repr(token))
+                    raise Exception('unexpected: %s' % token)
             elif isinstance(token, stypes.Where):
                 self.on_WHERE(token)
             elif not source_found:
                 self.set_projections(token)
                 continue
             else:
-                raise Exception('unexpected: %s' % repr(token))
+                raise Exception('unexpected: %s' % token)
 
     def set_projections(self, token):
         if isinstance(token, stypes.IdentifierList):
@@ -88,6 +94,8 @@ class SqlSelect(object):
         for id in ids:
             if isinstance(id, stypes.Identifier):
                 if isinstance(id.tokens[0], stypes.Function):
+                    self.projections[id.get_name()] = id.tokens[0]
+                elif isinstance(id.tokens[0], stypes.Expression):
                     self.projections[id.get_name()] = id.tokens[0]
                 else:
                     self.projections[id.get_name()] = id
@@ -101,14 +109,15 @@ class SqlSelect(object):
             if token.ttype in (ttypes.Whitespace, ttypes.Comment):
                 continue
             if isinstance(token, stypes.Identifier):
+                if len(token.tokens) > 1:
+                    raise Exception('unexpected: %s' % token)
                 self.source = token.get_name()
                 break
-            elif isinstance(token, stypes.Parenthesis):
-                source = sqlparse.parse(token.value[1:-1].strip())[0]
-                self.source = SqlSelect(source.tokens)
+            elif isinstance(token, stypes.Function):
+                self.source = token
                 break
             else:
-                raise Exception('unexpected: %s' % repr(token))
+                raise Exception('unexpected: %s' % token)
         return idx
 
     def on_LIMIT(self, tokens, idx):
@@ -142,7 +151,7 @@ class SqlSelect(object):
                 if 'BY' == token.value.upper():
                     return self.on_GROUP_BY(tokens, idx)
             else:
-                raise Exception('unexpected: %s' % repr(token))
+                raise Exception('unexpected: %s' % token)
 
     def on_GROUP_BY(self, tokens, idx):
         while idx < len(tokens):
@@ -156,12 +165,18 @@ class SqlSelect(object):
             elif isinstance(token, stypes.Identifier):
                 ids = [token]
             else:
-                raise Exception('unexpected: %s' % repr(token))
+                raise Exception('unexpected: %s' % token)
             for id in ids:
                 if ttypes.Keyword == id.ttype:
                     raise Exception('%s is keyword' % id.value)
                 elif isinstance(id, stypes.Identifier):
-                    self.group_by[id.get_name()] = id.tokens[0]
+                    if isinstance(id.tokens[0], stypes.Parenthesis):
+                        striped = id.tokens[0].strip_parenthesis()
+                        if len(striped) > 1:
+                            raise Exception('unexpected: %s' % id.tokens[0])
+                        self.group_by[id.get_name()] = striped[0]
+                    else:
+                        self.group_by[id.get_name()] = id.tokens[0]
                 else:
                     raise Exception('unexpected: %s' % repr(id))
             return idx
@@ -176,7 +191,7 @@ class SqlSelect(object):
                 if 'BY' == token.value.upper():
                     return self.on_ORDER_BY(tokens, idx)
             else:
-                raise Exception('unexpected: %s' % repr(token))
+                raise Exception('unexpected: %s' % token)
 
     def on_ORDER_BY(self, tokens, idx):
         while idx < len(tokens):
@@ -185,7 +200,7 @@ class SqlSelect(object):
             if token.ttype in (ttypes.Whitespace, ttypes.Comment):
                 continue
             if isinstance(token, stypes.IdentifierList):
-                self.order_by = token.get_identifiers()
+                self.order_by = list(token.get_identifiers())
             else:
                 self.order_by = [token]
             return idx

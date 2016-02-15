@@ -213,12 +213,12 @@ class TokenList(Token):
             else:
                 yield token
 
-#    def __iter__(self):
-#        return self
-#
-#    def next(self):
-#        for token in self.tokens:
-#            yield token
+            #    def __iter__(self):
+            #        return self
+            #
+            #    def next(self):
+            #        for token in self.tokens:
+            #            yield token
 
     def is_group(self):
         return True
@@ -403,7 +403,7 @@ class TokenList(Token):
 
         # "name alias" or "complicated column expression alias"
         if len(self.tokens) > 2 \
-           and self.token_next_by_type(0, T.Whitespace) is not None:
+                and self.token_next_by_type(0, T.Whitespace) is not None:
             return self._get_first_name(reverse=True)
 
         return None
@@ -552,6 +552,11 @@ class Parenthesis(TokenList):
     def _groupable_tokens(self):
         return self.tokens[1:-1]
 
+    def strip_parenthesis(self):
+        end = self.token_prev(len(self.tokens) - 1, skip_ws=True)
+        start = self.token_next(0, skip_ws=True)
+        return self.tokens_between(start, end)
+
 
 class SquareBrackets(TokenList):
     """Tokens between square brackets"""
@@ -589,6 +594,27 @@ class Comparison(TokenList):
     @property
     def right(self):
         return self.tokens[-1]
+
+    @property
+    def operator(self):
+        return str(TokenList(self.tokens[1:-1])).strip()
+
+
+class Expression(TokenList):
+    """A comparison used for example in WHERE clauses."""
+    __slots__ = ('value', 'ttype', 'tokens')
+
+    @property
+    def left(self):
+        return self.tokens[0]
+
+    @property
+    def right(self):
+        return self.tokens[-1]
+
+    @property
+    def operator(self):
+        return str(TokenList(self.tokens[1:-1])).strip()
 
 
 class Comment(TokenList):
@@ -666,8 +692,8 @@ class Function(TokenList):
             if isinstance(t, IdentifierList):
                 return t.get_identifiers()
             elif (isinstance(t, Identifier) or
-                  isinstance(t, Function) or
-                  t.ttype in T.Literal):
+                      isinstance(t, Function) or
+                          t.ttype in T.Literal):
                 return [t, ]
         return []
 
