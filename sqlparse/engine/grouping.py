@@ -136,7 +136,7 @@ def group_assignment(tlist):
 def group_comparison(tlist):
 
     def _parts_valid(token):
-        return (token.ttype in (T.String.Symbol, T.String.Single,
+        return (token.ttype in (T.String.Symbol, T.String.Single, T.String.Symbol,
                                 T.Name, T.Number, T.Number.Float,
                                 T.Number.Integer, T.Literal,
                                 T.Literal.Number.Integer, T.Name.Placeholder)
@@ -150,7 +150,7 @@ def group_comparison(tlist):
 def group_expression(tlist):
 
     def _parts_valid(token):
-        return (token.ttype in (T.String.Symbol, T.String.Single,
+        return (token.ttype in (T.String.Symbol, T.String.Single, T.String.Symbol,
                                 T.Name, T.Number, T.Number.Float,
                                 T.Number.Integer, T.Literal,
                                 T.Literal.Number.Integer, T.Name.Placeholder)

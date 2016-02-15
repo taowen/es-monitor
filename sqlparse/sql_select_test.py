@@ -86,9 +86,9 @@ class TestSqlSelectSource(unittest.TestCase):
     def test_source_not_support_as(self):
         try:
             sql_select = SqlSelect.parse('SELECT * FROM index("symbol") AS abc')
-            self.fail('should fail')
         except:
-            pass
+            return
+        self.fail('should fail')
 
 
 class TestSqlSelectWhere(unittest.TestCase):
@@ -203,7 +203,6 @@ class TestSqlSelectOrderBy(unittest.TestCase):
 class TestSqlSelectHaving(unittest.TestCase):
     def test_bigger_than(self):
         sql_select = SqlSelect.parse('SELECT * FROM symbol HAVING a > 0 ORDER BY name')
-        print(sql_select.having)
         comparison = sql_select.having[-2]
         self.assertEqual(stypes.Comparison, type(comparison))
         self.assertEqual('>', comparison.operator)

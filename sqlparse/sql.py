@@ -528,6 +528,19 @@ class Identifier(TokenList):
                 # Use [1:-1] index to discard the square brackets
                 yield tok.tokens[1:-1]
 
+    def without_as(self):
+        kw = self.token_next_match(0, T.Keyword, 'AS')
+        if kw is not None:
+            without_as_tokens = self.tokens_between(self.tokens[0], self.token_prev(kw))
+            if len(without_as_tokens) == 1:
+                return without_as_tokens[0]
+            else:
+                return TokenList(without_as_tokens)
+        if len(self.tokens) == 1:
+            return self.tokens[0]
+        else:
+            return self
+
 
 class IdentifierList(TokenList):
     """A list of :class:`~sqlparse.sql.Identifier`\'s."""

@@ -93,12 +93,7 @@ class SqlSelect(object):
         self.projections = {}
         for id in ids:
             if isinstance(id, stypes.Identifier):
-                if isinstance(id.tokens[0], stypes.Function):
-                    self.projections[id.get_name()] = id.tokens[0]
-                elif isinstance(id.tokens[0], stypes.Expression):
-                    self.projections[id.get_name()] = id.tokens[0]
-                else:
-                    self.projections[id.get_name()] = id
+                self.projections[id.get_name() or str(id)] = id.without_as()
             else:
                 self.projections[id.value] = id
 

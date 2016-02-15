@@ -25,15 +25,15 @@ def execute_sql(es_hosts, sql):
     global ES_HOSTS
 
     ES_HOSTS = es_hosts
-    statement = sqlparse.parse(sql.strip())[0]
-    sql_select = SqlSelect(statement.tokens)
-    rows = create_executor(sql_select).execute()
+    rows = create_executor(sql).execute()
     for row in rows:
         row.pop('_bucket_', None)
     return rows
 
 
 def create_executor(sql_select):
+    if isinstance(sql_select, basestring):
+        sql_select = SqlSelect.parse(sql_select.strip())
     if isinstance(sql_select.source, basestring):
         if sql_select.is_select_inside:
             return SelectInsideLeafExecutor(sql_select, search_es)
