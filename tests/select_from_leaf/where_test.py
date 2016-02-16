@@ -13,6 +13,47 @@ class TestSelectFromLeafProjections(unittest.TestCase):
             {'query': {'bool': {'filter': [{'term': {'exchange': 'nyse'}}, {'term': {'sector': 'Technology'}}]}}},
             executor.request)
 
+    def test_and_not(self):
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE exchange='nyse' AND NOT sector='Technology'")
+        self.assertEqual(
+            {'query': {'bool': {
+                'filter': [{'term': {'exchange': 'nyse'}}],
+                'must_not': [{'term': {'sector': 'Technology'}}]}}},
+            executor.request)
+
+    def test_not_and_not(self):
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE NOT exchange='nyse' AND NOT sector='Technology'")
+        self.assertEqual(
+            {'query': {'bool': {
+                'must_not': [{'term': {'exchange': 'nyse'}}, {'term': {'sector': 'Technology'}}]}}},
+            executor.request)
+
+    def test_and_and(self):
+        executor = es_query.create_executor(
+            "SELECT * FROM symbol WHERE exchange='nyse' AND sector='Technology' AND ipo_year=1998")
+        self.assertEqual(
+            {'query': {'bool': {'filter': [
+                {'term': {'exchange': 'nyse'}},
+                {'term': {'sector': 'Technology'}},
+                {'term': {'ipo_year': 1998}},
+            ]}}},
+            executor.request)
+
+    def test_or(self):
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE exchange='nyse' OR sector='Technology'")
+        self.assertEqual(
+            {'query': {'bool': {'should': [{'term': {'exchange': 'nyse'}}, {'term': {'sector': 'Technology'}}]}}},
+            executor.request)
+
+    def test_or_not(self):
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE exchange='nyse' OR NOT sector='Technology'")
+        print(executor.request)
+        self.assertEqual(
+            {'query': {'bool': {'should': [
+                {'term': {'exchange': 'nyse'}},
+                {'bool': {'must_not': [{'term': {'sector': 'Technology'}}]}}]}}},
+            executor.request)
+
     def test_field_gt_numeric(self):
         executor = es_query.create_executor("SELECT * FROM symbol WHERE last_sale > 1000")
         self.assertEqual(
@@ -40,5 +81,11 @@ class TestSelectFromLeafProjections(unittest.TestCase):
     def test_field_not_eq_numeric(self):
         executor = es_query.create_executor("SELECT * FROM symbol WHERE last_sale != 1000")
         self.assertEqual(
-            {'query': {'not': {'term': {'last_sale': 1000}}}},
+            {'query': {'bool': {'must_not': {'term': {'last_sale': 1000}}}}},
+            executor.request)
+
+    def test_field_in_range(self):
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE last_sale > 500 AND last_sale < 600")
+        self.assertEqual(
+            {'query': {'range': {'last_sale': {'lt': 600.0, 'gt': 500.0}}}},
             executor.request)
