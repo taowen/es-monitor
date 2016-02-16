@@ -51,31 +51,31 @@ def create_comparision_filter(token):
         raise Exception('unexpected: %s' % token)
     operator = token.token_next_by_type(0, ttypes.Comparison)
     if '>' == operator.value:
-        return {'range': {token.left.get_name(): {'gt': eval_numeric_value(str(token.right))}}}
+        return {'range': {token.left.value: {'gt': eval_numeric_value(str(token.right))}}}
     elif '>=' == operator.value:
-        return {'range': {token.left.get_name(): {'gte': eval_numeric_value(str(token.right))}}}
+        return {'range': {token.left.value: {'gte': eval_numeric_value(str(token.right))}}}
     elif '<' == operator.value:
-        return {'range': {token.left.get_name(): {'lt': eval_numeric_value(str(token.right))}}}
+        return {'range': {token.left.value: {'lt': eval_numeric_value(str(token.right))}}}
     elif '<=' == operator.value:
-        return {'range': {token.left.get_name(): {'lte': eval_numeric_value(str(token.right))}}}
+        return {'range': {token.left.value: {'lte': eval_numeric_value(str(token.right))}}}
     elif '=' == operator.value:
         right_operand = eval(token.right.value)
-        return {'term': {token.left.get_name(): right_operand}}
+        return {'term': {token.left.value: right_operand}}
     elif operator.value.upper() in ('LIKE', 'ILIKE'):
         right_operand = eval(token.right.value)
-        return {'wildcard': {token.left.get_name(): right_operand.replace('%', '*').replace('_', '?')}}
+        return {'wildcard': {token.left.value: right_operand.replace('%', '*').replace('_', '?')}}
     elif operator.value in ('!=', '<>'):
         right_operand = eval(token.right.value)
-        return {'not': {'term': {token.left.get_name(): right_operand}}}
+        return {'not': {'term': {token.left.value: right_operand}}}
     elif 'IN' == operator.value.upper():
         values = eval(token.right.value)
         if not isinstance(values, tuple):
             values = (values,)
-        return {'terms': {token.left.get_name(): values}}
+        return {'terms': {token.left.value: values}}
     elif 'IS' == operator.value.upper():
         if 'NULL' != token.right.value.upper():
             raise Exception('unexpected: %s' % repr(token.right))
-        return {'bool': {'must_not': {'exists': {'field': token.left.get_name()}}}}
+        return {'bool': {'must_not': {'exists': {'field': token.left.value}}}}
     else:
         raise Exception('unexpected operator: %s' % operator.value)
 

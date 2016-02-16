@@ -24,11 +24,13 @@ def read_symbols():
     for exchange in ['nasdaq', 'nyse', 'nyse mkt']:
         with open('%s.csv' % exchange) as f:
             f.readline()
-            for symbol in csv.DictReader(f,
-                                         fieldnames=['symbol', 'name', 'last_sale', 'market_cap', 'ipo_year', 'sector',
-                                                     'industry']):
+            if 'nasdaq' == exchange:
+                field_names = ['symbol', 'name', 'last_sale', 'market_cap', 'ipo_year', 'sector', 'industry']
+            else:
+                field_names = ['symbol', 'name', 'last_sale', 'market_cap', None, 'ipo_year', 'sector', 'industry']
+            for symbol in csv.DictReader(f, fieldnames=field_names):
                 symbol.pop(None, None)
-                symbol['exchange'] = 'nasdaq'
+                symbol['exchange'] = exchange
                 if 'n/a' == symbol['ipo_year']:
                     symbol['ipo_year'] = None
                 else:
@@ -80,7 +82,7 @@ def create_index_template():
     request = urllib2.Request('http://localhost:9200/_template/symbol', data=json.dumps({
         'template': 'symbol',
         'settings': {
-            'number_of_shards': 3,
+            'number_of_shards': 1,
             'number_of_replicas': 0
         },
         'mappings': {

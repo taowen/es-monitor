@@ -2,7 +2,7 @@ import unittest
 import es_query
 
 
-class TestProjections(unittest.TestCase):
+class TestSelectFromLeafProjections(unittest.TestCase):
     def test_select_all(self):
         executor = es_query.create_executor('SELECT * FROM symbol')
         self.assertIsNotNone(executor)
