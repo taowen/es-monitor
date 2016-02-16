@@ -79,8 +79,6 @@ def translate_projection_to_python(projection):
     for token in tokens:
         if token.ttype == ttypes.String.Symbol:
             translated.append(translate_symbol(token))
-        elif token.ttype == ttypes.Punctuation:
-            raise Exception('a.b should use the form "a.b": %s' % str(projection))
         else:
             translated.append(str(token))
     return ''.join(translated)

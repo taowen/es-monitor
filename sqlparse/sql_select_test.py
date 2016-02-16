@@ -73,6 +73,10 @@ class TestSqlSelectProjections(unittest.TestCase):
         self.assertEqual([], sql_select.having)
         self.assertIsNone(sql_select.limit)
 
+    def test_projections(self):
+        sql_select = SqlSelect.parse('SELECT a,b FROM symbol')
+        self.assertEqual(['a', 'b'], sql_select.projections.keys())
+
 
 class TestSqlSelectSource(unittest.TestCase):
     def test_source_is_string(self):
@@ -148,6 +152,14 @@ class TestSqlSelectWhere(unittest.TestCase):
         self.assertEqual('a', str(comparison.left))
         self.assertEqual("'abc%'", str(comparison.right))
 
+    def test_bigger_than_function_expression(self):
+        sql_select = SqlSelect.parse("SELECT * FROM symbol WHERE a > now() - INTERVAL '5 DAYS'")
+        comparison = sql_select.where.tokens[-1]
+        self.assertEqual(stypes.Comparison, type(comparison))
+        self.assertEqual('>', comparison.operator)
+        self.assertEqual('a', str(comparison.left))
+        self.assertEqual("now() - INTERVAL '5 DAYS'", str(comparison.right))
+
 
 class TestSqlSelectGroupBy(unittest.TestCase):
     def test_group_by_one_field(self):
@@ -181,13 +193,13 @@ class TestSqlSelectOrderBy(unittest.TestCase):
     def test_order_by_one_field(self):
         sql_select = SqlSelect.parse("SELECT * FROM symbol ORDER BY name")
         self.assertEqual(1, len(sql_select.order_by))
-        self.assertEqual(stypes.Identifier, type(sql_select.order_by[0]))
+        self.assertEqual('name', str(sql_select.order_by[0]))
 
     def test_order_by_multiple_fields(self):
         sql_select = SqlSelect.parse("SELECT * FROM symbol ORDER BY name1, name2")
         self.assertEqual(2, len(sql_select.order_by))
-        self.assertEqual(stypes.Identifier, type(sql_select.order_by[0]))
-        self.assertEqual(stypes.Identifier, type(sql_select.order_by[1]))
+        self.assertEqual('name1', str(sql_select.order_by[0]))
+        self.assertEqual('name2', str(sql_select.order_by[1]))
 
     def test_order_by_asc(self):
         sql_select = SqlSelect.parse("SELECT * FROM symbol ORDER BY name ASC")

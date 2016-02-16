@@ -213,12 +213,12 @@ class TokenList(Token):
             else:
                 yield token
 
-            #    def __iter__(self):
-            #        return self
-            #
-            #    def next(self):
-            #        for token in self.tokens:
-            #            yield token
+                #    def __iter__(self):
+                #        return self
+                #
+                #    def next(self):
+                #        for token in self.tokens:
+                #            yield token
 
     def is_group(self):
         return True
@@ -611,6 +611,19 @@ class Comparison(TokenList):
     @property
     def operator(self):
         return str(TokenList(self.tokens[1:-1])).strip()
+
+
+class Datetime(TokenList):
+    """A comparison used for example in WHERE clauses."""
+    __slots__ = ('value', 'ttype', 'tokens')
+
+    @property
+    def datetime_type(self):
+        return self.tokens[0]
+
+    @property
+    def datetime_value(self):
+        return self.tokens[-1]
 
 
 class Expression(TokenList):

@@ -86,6 +86,10 @@ class SqlSelect(object):
                 raise Exception('unexpected: %s' % token)
 
     def set_projections(self, token):
+        if token.ttype == ttypes.Punctuation:
+            raise Exception('a.b should use the form "a.b"')
+        if self.projections:
+            raise Exception('projections has already been set')
         if isinstance(token, stypes.IdentifierList):
             ids = list(token.get_identifiers())
         else:
@@ -94,8 +98,10 @@ class SqlSelect(object):
         for id in ids:
             if isinstance(id, stypes.Identifier):
                 self.projections[id.get_name() or str(id)] = id.without_as()
+            elif ttypes.String.Symbol == id.ttype:
+                self.projections[id.value[1:-1]] = id
             else:
-                self.projections[id.value] = id
+                self.projections[str(id)] = id
 
     def on_FROM(self, tokens, idx):
         while idx < len(tokens):
@@ -103,7 +109,10 @@ class SqlSelect(object):
             idx += 1
             if token.ttype in (ttypes.Whitespace, ttypes.Comment):
                 continue
-            if isinstance(token, stypes.Identifier):
+            if ttypes.Name == token.ttype:
+                self.source = token.value
+                break
+            elif isinstance(token, stypes.Identifier):
                 if len(token.tokens) > 1:
                     raise Exception('unexpected: %s' % token)
                 self.source = token.get_name()
@@ -157,13 +166,13 @@ class SqlSelect(object):
             self.group_by = OrderedDict()
             if isinstance(token, stypes.IdentifierList):
                 ids = list(token.get_identifiers())
-            elif isinstance(token, stypes.Identifier):
-                ids = [token]
             else:
-                raise Exception('unexpected: %s' % token)
+                ids = [token]
             for id in ids:
                 if ttypes.Keyword == id.ttype:
                     raise Exception('%s is keyword' % id.value)
+                elif ttypes.Name == id.ttype:
+                    self.group_by[id.value] = id
                 elif isinstance(id, stypes.Identifier):
                     if isinstance(id.tokens[0], stypes.Parenthesis):
                         striped = id.tokens[0].strip_parenthesis()

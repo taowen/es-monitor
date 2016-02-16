@@ -65,7 +65,6 @@ def _find_matching(idx, tlist, start_ttype, start_value, end_ttype, end_value):
 
 def _group_matching(tlist, start_ttype, start_value, end_ttype, end_value,
                     cls, include_semicolon=False, recurse=False):
-
     [_group_matching(sgroup, start_ttype, start_value, end_ttype, end_value,
                      cls, include_semicolon) for sgroup in tlist.get_sublists()
      if recurse]
@@ -112,7 +111,6 @@ def group_begin(tlist):
 
 
 def group_as(tlist):
-
     def _right_valid(token):
         # Currently limited to DML/DDL. Maybe additional more non SQL reserved
         # keywords should appear here (see issue8).
@@ -134,27 +132,38 @@ def group_assignment(tlist):
 
 
 def group_comparison(tlist):
-
     def _parts_valid(token):
         return (token.ttype in (T.String.Symbol, T.String.Single, T.String.Symbol,
                                 T.Name, T.Number, T.Number.Float,
                                 T.Number.Integer, T.Literal,
                                 T.Literal.Number.Integer, T.Name.Placeholder)
-                or isinstance(token, (sql.Identifier, sql.Parenthesis, sql.Function))
+                or isinstance(token, (sql.Identifier, sql.Parenthesis, sql.Function, sql.Datetime, sql.Expression))
                 or (token.ttype is T.Keyword
                     and token.value.upper() in ['NULL', ]))
+
     _group_left_right(tlist, T.Operator.Comparison, None, sql.Comparison,
                       check_left=_parts_valid, check_right=_parts_valid)
 
 
-def group_expression(tlist):
+def group_datetime(tlist):
+    def check_left(token):
+        return str(token).upper() in ('DATE', 'TIME', 'TIMESTAMP', 'INTERVAL')
 
+    def check_right(token):
+        return token.ttype == T.String.Single
+
+    _group_left_right(tlist, T.Whitespace, None, sql.Datetime,
+                      check_left=check_left, check_right=check_right)
+
+
+def group_expression(tlist):
     def _parts_valid(token):
         return (token.ttype in (T.String.Symbol, T.String.Single, T.String.Symbol,
                                 T.Name, T.Number, T.Number.Float,
                                 T.Number.Integer, T.Literal,
                                 T.Literal.Number.Integer, T.Name.Placeholder)
-                or isinstance(token, (sql.Identifier, sql.Parenthesis, sql.Function)))
+                or isinstance(token, (sql.Identifier, sql.Parenthesis, sql.Function, sql.Datetime)))
+
     _group_left_right(tlist, T.Operator, None, sql.Expression,
                       check_left=_parts_valid, check_right=_parts_valid)
 
@@ -162,85 +171,6 @@ def group_expression(tlist):
 def group_case(tlist):
     _group_matching(tlist, T.Keyword, 'CASE', T.Keyword, 'END', sql.Case,
                     include_semicolon=True, recurse=True)
-
-
-def group_identifier(tlist):
-    def _consume_cycle(tl, i):
-        # TODO: Usage of Wildcard token is ambivalent here.
-        x = itertools.cycle((
-            lambda y: (y.match(T.Punctuation, '.')
-                       or y.ttype in (T.Operator,
-                                      T.Wildcard,
-                                      T.Name)
-                       or isinstance(y, sql.SquareBrackets)),
-            lambda y: (y.ttype in (T.String.Symbol,
-                                   T.Name,
-                                   T.Wildcard,
-                                   T.Literal.String.Single,
-                                   T.Literal.Number.Integer,
-                                   T.Literal.Number.Float)
-                       or isinstance(y, (sql.Parenthesis,
-                                         sql.SquareBrackets,
-                                         sql.Function)))))
-        for t in tl.tokens[i:]:
-            # Don't take whitespaces into account.
-            if t.ttype is T.Whitespace:
-                yield t
-                continue
-            if next(x)(t):
-                yield t
-            else:
-                if isinstance(t, sql.Comment) and t.is_multiline():
-                    yield t
-                return
-
-    def _next_token(tl, i):
-        # chooses the next token. if two tokens are found then the
-        # first is returned.
-        t1 = tl.token_next_by_type(
-            i, (T.String.Symbol, T.Name, T.Literal.Number.Integer,
-                T.Literal.Number.Float))
-
-        i1 = tl.token_index(t1, start=i) if t1 else None
-        t2_end = None if i1 is None else i1 + 1
-        t2 = tl.token_next_by_instance(i, (sql.Function, sql.Parenthesis),
-                                       end=t2_end)
-
-        if t1 and t2:
-            i2 = tl.token_index(t2, start=i)
-            if i1 > i2:
-                return t2
-            else:
-                return t1
-        elif t1:
-            return t1
-        else:
-            return t2
-
-    # bottom up approach: group subgroups first
-    [group_identifier(sgroup) for sgroup in tlist.get_sublists()
-     if not isinstance(sgroup, sql.Identifier)]
-
-    # real processing
-    idx = 0
-    token = _next_token(tlist, idx)
-    while token:
-        identifier_tokens = [token] + list(
-            _consume_cycle(tlist,
-                           tlist.token_index(token, start=idx) + 1))
-        # remove trailing whitespace
-        if identifier_tokens and identifier_tokens[-1].ttype is T.Whitespace:
-            identifier_tokens = identifier_tokens[:-1]
-        if not (len(identifier_tokens) == 1
-                and (isinstance(identifier_tokens[0], (sql.Function,
-                                                       sql.Parenthesis))
-                     or identifier_tokens[0].ttype in (
-                     T.Literal.Number.Integer, T.Literal.Number.Float))):
-            group = tlist.group_tokens(sql.Identifier, identifier_tokens)
-            idx = tlist.token_index(group, start=idx) + 1
-        else:
-            idx += 1
-        token = _next_token(tlist, idx)
 
 
 def group_identifier_list(tlist):
@@ -425,7 +355,7 @@ def group_order(tlist):
     token = tlist.token_next_by_type(idx, T.Keyword.Order)
     while token:
         prev = tlist.token_prev(token)
-        if isinstance(prev, sql.Identifier):
+        if isinstance(prev, sql.Identifier) or prev.ttype in (T.Name, T.String.Symbol):
             ido = tlist.group_tokens(sql.Identifier,
                                      tlist.tokens_between(prev, token))
             idx = tlist.token_index(ido) + 1
@@ -453,24 +383,24 @@ def align_comments(tlist):
 
 def group(tlist):
     for func in [
-            group_comments,
-            group_brackets,
-            group_functions,
-            group_where,
-            group_case,
-            group_identifier,
-            group_order,
-            group_typecasts,
-            group_as,
-            group_aliased,
-            group_assignment,
-            group_comparison,
-            group_expression,
-            align_comments,
-            group_identifier_list,
-            group_if,
-            group_for,
-            group_foreach,
-            group_begin,
-            ]:
+        group_comments,
+        group_brackets,
+        group_functions,
+        group_where,
+        group_case,
+        group_datetime,
+        group_expression,
+        group_comparison,
+        group_order,
+        group_typecasts,
+        group_as,
+        group_aliased,
+        group_assignment,
+        align_comments,
+        group_identifier_list,
+        group_if,
+        group_for,
+        group_foreach,
+        group_begin,
+    ]:
         func(tlist)
