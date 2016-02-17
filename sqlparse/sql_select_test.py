@@ -158,7 +158,7 @@ class TestSqlSelectWhere(unittest.TestCase):
         self.assertEqual(stypes.Comparison, type(comparison))
         self.assertEqual('>', comparison.operator)
         self.assertEqual('a', str(comparison.left))
-        self.assertEqual("now() - INTERVAL '5 DAYS'", str(comparison.right))
+        self.assertEqual("now() - eval_datetime('INTERVAL', '5 DAYS')", str(comparison.right))
 
 
 class TestSqlSelectGroupBy(unittest.TestCase):

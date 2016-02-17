@@ -1,5 +1,6 @@
 import unittest
 import es_query
+import datetime
 from executors.translators import filter_translator
 
 class TestSelectFromLeafProjections(unittest.TestCase):
@@ -142,7 +143,12 @@ class TestSelectFromLeafProjections(unittest.TestCase):
         self.assertEqual({'query': {'term': {'a.exchange': 'nyse'}}}, executor.request)
 
     def test_now(self):
-        filter_translator.NOW = 1455688794624L
+        filter_translator.NOW = datetime.datetime(2016, 8, 8)
         executor = es_query.create_executor("SELECT * FROM symbol WHERE ts > now()")
-        self.assertEqual({'query': {'range': {'ts': {'gt': 1455688794624L}}}}, executor.request)
+        self.assertEqual({'query': {'range': {'ts': {'gt': 1470585600000L}}}}, executor.request)
+
+    def test_now_expression(self):
+        filter_translator.NOW = datetime.datetime(2016, 8, 8)
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE ts > now() - INTERVAL '1 DAY'")
+        self.assertEqual({'query': {'range': {'ts': {'gt': 1470585600000L - 24 * 60 * 60 * 1000}}}}, executor.request)
 

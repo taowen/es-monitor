@@ -207,7 +207,9 @@ class TokenList(Token):
         This method is recursively called for all child tokens.
         """
         for token in self.tokens:
-            if isinstance(token, TokenList):
+            if isinstance(token, Datetime):
+                yield token
+            elif isinstance(token, TokenList):
                 for item in token.flatten():
                     yield item
             else:
@@ -624,6 +626,10 @@ class Datetime(TokenList):
     @property
     def datetime_value(self):
         return self.tokens[-1]
+
+    def _to_string(self):
+        return "eval_datetime('%s', %s)" % (str(self.datetime_type), str(self.datetime_value))
+
 
 
 class Expression(TokenList):
