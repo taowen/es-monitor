@@ -147,7 +147,7 @@ def group_comparison(tlist):
 
 def group_datetime(tlist):
     def check_left(token):
-        return str(token).upper() in ('DATE', 'TIME', 'TIMESTAMP', 'INTERVAL')
+        return str(token).upper() in ('TIMESTAMP', 'INTERVAL')
 
     def check_right(token):
         return token.ttype == T.String.Single

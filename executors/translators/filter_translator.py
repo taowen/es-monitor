@@ -172,6 +172,8 @@ def eval_datetime(datetime_type, datetime_value):
         except:
             LOGGER.debug('failed to parse: %s' % datetime_value, exc_info=1)
             raise
+    elif 'TIMESTAMP' == datetime_type.upper():
+        return datetime.datetime.strptime(datetime_value, '%Y-%m-%d %H:%M:%S')
     else:
         raise Exception('unsupported datetime type: %s' % datetime_type)
 
