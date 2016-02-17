@@ -1,6 +1,6 @@
 import unittest
 import es_query
-
+from executors.translators import filter_translator
 
 class TestSelectFromLeafProjections(unittest.TestCase):
     def test_field_eq_string(self):
@@ -140,3 +140,9 @@ class TestSelectFromLeafProjections(unittest.TestCase):
     def test_dot_field(self):
         executor = es_query.create_executor("SELECT * FROM symbol WHERE 'nyse'=\"a.exchange\"")
         self.assertEqual({'query': {'term': {'a.exchange': 'nyse'}}}, executor.request)
+
+    def test_now(self):
+        filter_translator.NOW = 1455688794624L
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE ts > now()")
+        self.assertEqual({'query': {'range': {'ts': {'gt': 1455688794624L}}}}, executor.request)
+

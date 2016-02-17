@@ -4,6 +4,7 @@ import re
 from sqlparse import tokens as ttypes
 from sqlparse import sql as stypes
 
+NOW = None
 
 def create_compound_filter(tokens):
     idx = 0
@@ -89,25 +90,29 @@ def create_comparision_filter(comparison):
         raise Exception('unexpected: %s' % comparison)
     operator = comparison.operator
     if operator in ('>', '>=', '<', '<='):
+        right_operand_as_value = eval_value(comparison.right)
+        left_operand_as_value = eval_value(comparison.left)
         simple_types = (ttypes.Number.Integer, ttypes.Number.Float)
-        if comparison.left.ttype in (ttypes.Name, ttypes.String.Symbol) and comparison.right.ttype in simple_types:
+        if comparison.left.ttype in (ttypes.Name, ttypes.String.Symbol) and right_operand_as_value is not None:
             operator_as_str = {'>': 'gt', '>=': 'gte', '<': 'lt', '<=': 'lte'}[operator]
-            return {'range': {eval_field_name(comparison.left): {operator_as_str: eval_numeric_value(str(comparison.right))}}}
-        elif comparison.right.ttype in (ttypes.Name, ttypes.String.Symbol) and comparison.left.ttype in simple_types:
+            return {
+                'range': {eval_field_name(comparison.left): {operator_as_str: right_operand_as_value}}}
+        elif comparison.right.ttype in (ttypes.Name, ttypes.String.Symbol) and left_operand_as_value is not None:
             operator_as_str = {'>': 'lte', '>=': 'lt', '<': 'gte', '<=': 'gt'}[operator]
-            return {'range': {eval_field_name(comparison.right): {operator_as_str: eval_numeric_value(str(comparison.left))}}}
+            return {
+                'range': {eval_field_name(comparison.right): {operator_as_str: left_operand_as_value}}}
         else:
             raise Exception('complex range condition not supported: %s' % comparison)
     elif '=' == operator:
         simple_types = (ttypes.Number.Integer, ttypes.Number.Float, ttypes.String.Single)
-        if comparison.left.ttype in (ttypes.Name, ttypes.String.Symbol) and comparison.right.ttype in simple_types:
+        right_operand_as_value = eval_value(comparison.right)
+        left_operand_as_value = eval_value(comparison.left)
+        if comparison.left.ttype in (ttypes.Name, ttypes.String.Symbol) and right_operand_as_value is not None:
             field = eval_field_name(comparison.left)
-            value = eval(comparison.right.value)
-            return {'term': {field: value}}
-        elif comparison.right.ttype in (ttypes.Name, ttypes.String.Symbol) and comparison.left.ttype in simple_types:
+            return {'term': {field: right_operand_as_value}}
+        elif comparison.right.ttype in (ttypes.Name, ttypes.String.Symbol) and left_operand_as_value is not None:
             field = eval_field_name(comparison.right)
-            value = eval(comparison.left.value)
-            return {'term': {field: value}}
+            return {'term': {field: left_operand_as_value}}
         else:
             raise Exception('complex equal condition not supported: %s' % comparison)
     elif operator.upper() in ('LIKE', 'ILIKE'):
@@ -142,22 +147,35 @@ def eval_field_name(token):
         raise Exception('not field: %s' % repr(token))
 
 
-def eval_numeric_value(token):
-    token_str = str(token).strip()
-    if token_str.startswith('('):
-        token_str = token_str[1:-1]
-    if token_str.startswith('@now'):
-        token_str = token_str[4:].strip()
-        if not token_str:
+def eval_value(token):
+    val = str(token)
+    try:
+        return eval(val, {}, {
+            'now': func_now
+        })
+    except:
+        return None
+
+
+def func_now():
+    return NOW or long(time.time() * 1000)
+
+
+def eval_numeric_value(val):
+    if val.startswith('('):
+        val = val[1:-1]
+    if val.startswith('@now'):
+        val = val[4:].strip()
+        if not val:
             return long(time.time() * long(1000))
-        if '+' == token_str[0]:
-            return long(time.time() * long(1000)) + eval_timedelta(token_str[1:])
-        elif '-' == token_str[0]:
-            return long(time.time() * long(1000)) - eval_timedelta(token_str[1:])
+        if '+' == val[0]:
+            return long(time.time() * long(1000)) + eval_timedelta(val[1:])
+        elif '-' == val[0]:
+            return long(time.time() * long(1000)) - eval_timedelta(val[1:])
         else:
             raise Exception('unexpected: %s' % token)
     else:
-        return float(token)
+        return float(val)
 
 
 def eval_timedelta(str):
