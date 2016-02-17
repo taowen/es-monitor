@@ -135,4 +135,8 @@ class TestSelectFromLeafProjections(unittest.TestCase):
         executor = es_query.create_executor("SELECT * FROM symbol WHERE 'nyse'=exchange")
         self.assertEqual({'query': {'term': {'exchange': 'nyse'}}}, executor.request)
         executor = es_query.create_executor("SELECT * FROM symbol WHERE 1998<ipo_year")
-        self.assertEqual({'query': {'term': {'exchange': 'nyse'}}}, executor.request)
+        self.assertEqual({'query': {'range': {'ipo_year': {'gte': 1998.0}}}}, executor.request)
+
+    def test_dot_field(self):
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE 'nyse'=\"a.exchange\"")
+        self.assertEqual({'query': {'term': {'a.exchange': 'nyse'}}}, executor.request)

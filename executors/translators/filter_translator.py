@@ -83,51 +83,63 @@ def try_merge_filter(new_filter, last_filter):
         return True
     return False
 
+
 def create_comparision_filter(comparison):
     if not isinstance(comparison, stypes.Comparison):
         raise Exception('unexpected: %s' % comparison)
     operator = comparison.operator
-    if '>' == operator:
-        return {'range': {comparison.left.value: {'gt': eval_numeric_value(str(comparison.right))}}}
-    elif '>=' == operator:
-        return {'range': {comparison.left.value: {'gte': eval_numeric_value(str(comparison.right))}}}
-    elif '<' == operator:
-        return {'range': {comparison.left.value: {'lt': eval_numeric_value(str(comparison.right))}}}
-    elif '<=' == operator:
-        return {'range': {comparison.left.value: {'lte': eval_numeric_value(str(comparison.right))}}}
+    if operator in ('>', '>=', '<', '<='):
+        simple_types = (ttypes.Number.Integer, ttypes.Number.Float)
+        if comparison.left.ttype in (ttypes.Name, ttypes.String.Symbol) and comparison.right.ttype in simple_types:
+            operator_as_str = {'>': 'gt', '>=': 'gte', '<': 'lt', '<=': 'lte'}[operator]
+            return {'range': {eval_field_name(comparison.left): {operator_as_str: eval_numeric_value(str(comparison.right))}}}
+        elif comparison.right.ttype in (ttypes.Name, ttypes.String.Symbol) and comparison.left.ttype in simple_types:
+            operator_as_str = {'>': 'lte', '>=': 'lt', '<': 'gte', '<=': 'gt'}[operator]
+            return {'range': {eval_field_name(comparison.right): {operator_as_str: eval_numeric_value(str(comparison.left))}}}
+        else:
+            raise Exception('complex range condition not supported: %s' % comparison)
     elif '=' == operator:
         simple_types = (ttypes.Number.Integer, ttypes.Number.Float, ttypes.String.Single)
         if comparison.left.ttype in (ttypes.Name, ttypes.String.Symbol) and comparison.right.ttype in simple_types:
-            field = comparison.left.value
+            field = eval_field_name(comparison.left)
             value = eval(comparison.right.value)
             return {'term': {field: value}}
         elif comparison.right.ttype in (ttypes.Name, ttypes.String.Symbol) and comparison.left.ttype in simple_types:
-            field = comparison.right.value
+            field = eval_field_name(comparison.right)
             value = eval(comparison.left.value)
             return {'term': {field: value}}
         else:
             raise Exception('complex equal condition not supported: %s' % comparison)
     elif operator.upper() in ('LIKE', 'ILIKE'):
         right_operand = eval(comparison.right.value)
-        return {'wildcard': {comparison.left.value: right_operand.replace('%', '*').replace('_', '?')}}
+        return {'wildcard': {eval_field_name(comparison.left): right_operand.replace('%', '*').replace('_', '?')}}
     elif operator in ('!=', '<>'):
         right_operand = eval(comparison.right.value)
-        return {'bool': {'must_not': {'term': {comparison.left.value: right_operand}}}}
+        return {'bool': {'must_not': {'term': {eval_field_name(comparison.left): right_operand}}}}
     elif 'IN' == operator.upper():
         values = eval(comparison.right.value)
         if not isinstance(values, tuple):
             values = (values,)
-        return {'terms': {comparison.left.value: values}}
+        return {'terms': {eval_field_name(comparison.left): values}}
     elif re.match('IS\s+NOT', operator.upper()):
         if 'NULL' != comparison.right.value.upper():
             raise Exception('unexpected: %s' % repr(comparison.right))
-        return {'exists': {'field': comparison.left.value}}
+        return {'exists': {'field': eval_field_name(comparison.left)}}
     elif 'IS' == operator.upper():
         if 'NULL' != comparison.right.value.upper():
             raise Exception('unexpected: %s' % repr(comparison.right))
-        return {'bool': {'must_not': {'exists': {'field': comparison.left.value}}}}
+        return {'bool': {'must_not': {'exists': {'field': eval_field_name(comparison.left)}}}}
     else:
         raise Exception('unexpected operator: %s' % operator.value)
+
+
+def eval_field_name(token):
+    if ttypes.Name == token.ttype:
+        return token.value
+    elif ttypes.String.Symbol == token.ttype:
+        return token.value[1:-1]
+    else:
+        raise Exception('not field: %s' % repr(token))
 
 
 def eval_numeric_value(token):
