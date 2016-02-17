@@ -1,4 +1,5 @@
 import time
+import re
 
 from sqlparse import tokens as ttypes
 from sqlparse import sql as stypes
@@ -82,36 +83,49 @@ def try_merge_filter(new_filter, last_filter):
         return True
     return False
 
-def create_comparision_filter(token):
-    if not isinstance(token, stypes.Comparison):
-        raise Exception('unexpected: %s' % token)
-    operator = token.token_next_by_type(0, ttypes.Comparison)
-    if '>' == operator.value:
-        return {'range': {token.left.value: {'gt': eval_numeric_value(str(token.right))}}}
-    elif '>=' == operator.value:
-        return {'range': {token.left.value: {'gte': eval_numeric_value(str(token.right))}}}
-    elif '<' == operator.value:
-        return {'range': {token.left.value: {'lt': eval_numeric_value(str(token.right))}}}
-    elif '<=' == operator.value:
-        return {'range': {token.left.value: {'lte': eval_numeric_value(str(token.right))}}}
-    elif '=' == operator.value:
-        right_operand = eval(token.right.value)
-        return {'term': {token.left.value: right_operand}}
-    elif operator.value.upper() in ('LIKE', 'ILIKE'):
-        right_operand = eval(token.right.value)
-        return {'wildcard': {token.left.value: right_operand.replace('%', '*').replace('_', '?')}}
-    elif operator.value in ('!=', '<>'):
-        right_operand = eval(token.right.value)
-        return {'bool': {'must_not': {'term': {token.left.value: right_operand}}}}
-    elif 'IN' == operator.value.upper():
-        values = eval(token.right.value)
+def create_comparision_filter(comparison):
+    if not isinstance(comparison, stypes.Comparison):
+        raise Exception('unexpected: %s' % comparison)
+    operator = comparison.operator
+    if '>' == operator:
+        return {'range': {comparison.left.value: {'gt': eval_numeric_value(str(comparison.right))}}}
+    elif '>=' == operator:
+        return {'range': {comparison.left.value: {'gte': eval_numeric_value(str(comparison.right))}}}
+    elif '<' == operator:
+        return {'range': {comparison.left.value: {'lt': eval_numeric_value(str(comparison.right))}}}
+    elif '<=' == operator:
+        return {'range': {comparison.left.value: {'lte': eval_numeric_value(str(comparison.right))}}}
+    elif '=' == operator:
+        simple_types = (ttypes.Number.Integer, ttypes.Number.Float, ttypes.String.Single)
+        if comparison.left.ttype in (ttypes.Name, ttypes.String.Symbol) and comparison.right.ttype in simple_types:
+            field = comparison.left.value
+            value = eval(comparison.right.value)
+            return {'term': {field: value}}
+        elif comparison.right.ttype in (ttypes.Name, ttypes.String.Symbol) and comparison.left.ttype in simple_types:
+            field = comparison.right.value
+            value = eval(comparison.left.value)
+            return {'term': {field: value}}
+        else:
+            raise Exception('complex equal condition not supported: %s' % comparison)
+    elif operator.upper() in ('LIKE', 'ILIKE'):
+        right_operand = eval(comparison.right.value)
+        return {'wildcard': {comparison.left.value: right_operand.replace('%', '*').replace('_', '?')}}
+    elif operator in ('!=', '<>'):
+        right_operand = eval(comparison.right.value)
+        return {'bool': {'must_not': {'term': {comparison.left.value: right_operand}}}}
+    elif 'IN' == operator.upper():
+        values = eval(comparison.right.value)
         if not isinstance(values, tuple):
             values = (values,)
-        return {'terms': {token.left.value: values}}
-    elif 'IS' == operator.value.upper():
-        if 'NULL' != token.right.value.upper():
-            raise Exception('unexpected: %s' % repr(token.right))
-        return {'bool': {'must_not': {'exists': {'field': token.left.value}}}}
+        return {'terms': {comparison.left.value: values}}
+    elif re.match('IS\s+NOT', operator.upper()):
+        if 'NULL' != comparison.right.value.upper():
+            raise Exception('unexpected: %s' % repr(comparison.right))
+        return {'exists': {'field': comparison.left.value}}
+    elif 'IS' == operator.upper():
+        if 'NULL' != comparison.right.value.upper():
+            raise Exception('unexpected: %s' % repr(comparison.right))
+        return {'bool': {'must_not': {'exists': {'field': comparison.left.value}}}}
     else:
         raise Exception('unexpected operator: %s' % operator.value)
 

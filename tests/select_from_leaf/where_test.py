@@ -118,3 +118,21 @@ class TestSelectFromLeafProjections(unittest.TestCase):
                 {'range': {'last_sale': {'gt': 600.0}}}]
             }}},
             executor.request)
+
+    def test_is_null(self):
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE last_sale IS NULL")
+        self.assertEqual(
+            {'query': {'bool': {'must_not': {'exists': {'field': 'last_sale'}}}}},
+            executor.request)
+
+    def test_is_not_null(self):
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE last_sale IS  NOT NULL")
+        self.assertEqual(
+            {'query': {'exists': {'field': 'last_sale'}}},
+            executor.request)
+
+    def test_field_can_be_right_operand(self):
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE 'nyse'=exchange")
+        self.assertEqual({'query': {'term': {'exchange': 'nyse'}}}, executor.request)
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE 1998<ipo_year")
+        self.assertEqual({'query': {'term': {'exchange': 'nyse'}}}, executor.request)
