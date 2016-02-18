@@ -136,6 +136,13 @@ class Token(object):
             parent = parent.parent
         return False
 
+    def as_field_name(self):
+        if self.ttype == T.String.Symbol:
+            return self.value[1:-1]
+        elif self.ttype == T.Name:
+            return self.value
+        raise Exception('not field: %s' % self)
+
 
 class TokenList(Token):
     """A group of tokens.
@@ -720,7 +727,11 @@ class Function(TokenList):
     def get_parameters(self):
         """Return a list of parameters."""
         parenthesis = self.tokens[-1]
-        return parenthesis.tokens[1:-1]
+        for t in parenthesis.tokens:
+            if isinstance(t, IdentifierList):
+                return t.get_identifiers()
+        return [t for t in parenthesis.tokens[1:-1] if t.ttype != T.Punctuation]
+
 
 
 class Begin(TokenList):

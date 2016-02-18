@@ -99,11 +99,11 @@ def create_comparision_filter(comparison):
         if comparison.left.ttype in (ttypes.Name, ttypes.String.Symbol) and right_operand_as_value is not None:
             operator_as_str = {'>': 'gt', '>=': 'gte', '<': 'lt', '<=': 'lte'}[operator]
             return {
-                'range': {eval_field_name(comparison.left): {operator_as_str: right_operand_as_value}}}
+                'range': {comparison.left.as_field_name(): {operator_as_str: right_operand_as_value}}}
         elif comparison.right.ttype in (ttypes.Name, ttypes.String.Symbol) and left_operand_as_value is not None:
             operator_as_str = {'>': 'lte', '>=': 'lt', '<': 'gte', '<=': 'gt'}[operator]
             return {
-                'range': {eval_field_name(comparison.right): {operator_as_str: left_operand_as_value}}}
+                'range': {comparison.right.as_field_name(): {operator_as_str: left_operand_as_value}}}
         else:
             raise Exception('complex range condition not supported: %s' % comparison)
     elif '=' == operator:
@@ -111,43 +111,34 @@ def create_comparision_filter(comparison):
         right_operand_as_value = eval_value(comparison.right)
         left_operand_as_value = eval_value(comparison.left)
         if comparison.left.ttype in (ttypes.Name, ttypes.String.Symbol) and right_operand_as_value is not None:
-            field = eval_field_name(comparison.left)
+            field = comparison.left.as_field_name()
             return {'term': {field: right_operand_as_value}}
         elif comparison.right.ttype in (ttypes.Name, ttypes.String.Symbol) and left_operand_as_value is not None:
-            field = eval_field_name(comparison.right)
+            field = comparison.right.as_field_name()
             return {'term': {field: left_operand_as_value}}
         else:
             raise Exception('complex equal condition not supported: %s' % comparison)
     elif operator.upper() in ('LIKE', 'ILIKE'):
         right_operand = eval(comparison.right.value)
-        return {'wildcard': {eval_field_name(comparison.left): right_operand.replace('%', '*').replace('_', '?')}}
+        return {'wildcard': {comparison.left.as_field_name(): right_operand.replace('%', '*').replace('_', '?')}}
     elif operator in ('!=', '<>'):
         right_operand = eval(comparison.right.value)
-        return {'bool': {'must_not': {'term': {eval_field_name(comparison.left): right_operand}}}}
+        return {'bool': {'must_not': {'term': {comparison.left.as_field_name(): right_operand}}}}
     elif 'IN' == operator.upper():
         values = eval(comparison.right.value)
         if not isinstance(values, tuple):
             values = (values,)
-        return {'terms': {eval_field_name(comparison.left): values}}
+        return {'terms': {comparison.left.as_field_name(): values}}
     elif re.match('IS\s+NOT', operator.upper()):
         if 'NULL' != comparison.right.value.upper():
             raise Exception('unexpected: %s' % repr(comparison.right))
-        return {'exists': {'field': eval_field_name(comparison.left)}}
+        return {'exists': {'field': comparison.left.as_field_name()}}
     elif 'IS' == operator.upper():
         if 'NULL' != comparison.right.value.upper():
             raise Exception('unexpected: %s' % repr(comparison.right))
-        return {'bool': {'must_not': {'exists': {'field': eval_field_name(comparison.left)}}}}
+        return {'bool': {'must_not': {'exists': {'field': comparison.left.as_field_name()}}}}
     else:
         raise Exception('unexpected operator: %s' % operator.value)
-
-
-def eval_field_name(token):
-    if ttypes.Name == token.ttype:
-        return token.value
-    elif ttypes.String.Symbol == token.ttype:
-        return token.value[1:-1]
-    else:
-        raise Exception('not field: %s' % repr(token))
 
 
 def eval_value(token):

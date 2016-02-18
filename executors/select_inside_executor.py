@@ -70,7 +70,7 @@ class SelectInsideExecutor(object):
                 elif isinstance(group_by, stypes.Parenthesis):
                     current_aggs = self.append_range_aggs(current_aggs, group_by, group_by_name)
                 elif isinstance(group_by, stypes.Function):
-                    sql_function_name = group_by.tokens[0].get_name().upper()
+                    sql_function_name = group_by.tokens[0].value.upper()
                     if sql_function_name in ('DATE_TRUNC', 'TO_CHAR'):
                         current_aggs = self.append_date_histogram_aggs(current_aggs, group_by, group_by_name)
                     elif 'HISTOGRAM' == sql_function_name:
@@ -93,19 +93,19 @@ class SelectInsideExecutor(object):
 
     def append_date_histogram_aggs(self, current_aggs, group_by, group_by_name):
         date_format = None
-        if 'to_char' == group_by.tokens[0].get_name():
-            to_char_params = list(group_by.tokens[0].get_parameters())
+        if 'TO_CHAR' == group_by.tokens[0].value.upper():
+            to_char_params = list(group_by.get_parameters())
             sql_function = to_char_params[0]
             date_format = eval(to_char_params[1].value)
         else:
             sql_function = group_by
-        if 'date_trunc' == sql_function.tokens[0].get_name():
+        if 'DATE_TRUNC' == sql_function.tokens[0].value.upper():
             parameters = tuple(sql_function.get_parameters())
             interval, field = parameters
             current_aggs = {
                 'aggs': {group_by_name: dict(current_aggs, **{
                     'date_histogram': {
-                        'field': field.get_name(),
+                        'field': field.as_field_name(),
                         'time_zone': '+08:00',
                         'interval': eval(interval.value)
                     }
@@ -119,7 +119,7 @@ class SelectInsideExecutor(object):
 
     def append_histogram_aggs(self, current_aggs, group_by, group_by_name):
         parameters = tuple(group_by.get_parameters())
-        historgram = {'field': parameters[0].get_name(), 'interval': eval(parameters[1].value)}
+        historgram = {'field': parameters[0].as_field_name(), 'interval': eval(parameters[1].value)}
         if len(parameters) == 3:
             historgram.update(eval(eval(parameters[2].value)))
         current_aggs = {
