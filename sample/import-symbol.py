@@ -2,16 +2,35 @@ import urllib2
 import json
 import sys
 import csv
+import os
+import zipfile
+import StringIO
 
 
 def main():
     create_index_template()
     delete_index()
     create_index()
-    symbols = read_symbols()
+    symbols = list(read_symbols())
     request = urllib2.Request('http://localhost:9200/_bulk', data='\n'.join(bluk_import_lines(symbols)))
     response = urllib2.urlopen(request).read()
     print(response)
+    # download_quote(symbols)
+
+
+def download_quote(symbols):
+    for symbol in symbols:
+        symbol = symbol['symbol']
+        if os.path.exists('quote/%s.csv' % symbol):
+            continue
+        print('download quotes of %s ...' % symbol)
+        try:
+            response = urllib2.urlopen(
+                'http://ichart.finance.yahoo.com/table.csv?s=%s&a=03&b=07&c=1981&d=09&e=04&f=2016' % symbol).read()
+            with open('quote/%s.csv' % symbol, 'w') as f:
+                f.write(response)
+        except urllib2.HTTPError as e:
+            print(e.code, e.read())
 
 
 def bluk_import_lines(symbols):
@@ -22,7 +41,7 @@ def bluk_import_lines(symbols):
 
 def read_symbols():
     for exchange in ['nasdaq', 'nyse', 'nyse mkt']:
-        with open('%s.csv' % exchange) as f:
+        with open('symbol/%s.csv' % exchange) as f:
             f.readline()
             if 'nasdaq' == exchange:
                 field_names = ['symbol', 'name', 'last_sale', 'market_cap', 'ipo_year', 'sector', 'industry']

@@ -3,7 +3,7 @@ import es_query
 import datetime
 from executors.translators import filter_translator
 
-class TestSelectFromLeafProjections(unittest.TestCase):
+class TestSelectFromLeafWhere(unittest.TestCase):
     def test_field_eq_string(self):
         executor = es_query.create_executor("SELECT * FROM symbol WHERE exchange='nyse'")
         self.assertEqual({'query': {'term': {'exchange': 'nyse'}}}, executor.request)
