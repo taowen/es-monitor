@@ -21,24 +21,24 @@ def translate_metrics(sql_select):
 def translate_metric(sql_function, projection_name):
     if not isinstance(sql_function, stypes.Function):
         raise Exception('unexpected: %s' % repr(sql_function))
-    sql_function_name = sql_function.tokens[0].get_name().upper()
+    sql_function_name = sql_function.tokens[0].value.upper()
     if 'COUNT' == sql_function_name:
         params = list(sql_function.get_parameters())
-        if params:
+        if len(params) == 1 and ttypes.Wildcard == params[0].ttype:
+            selector = lambda bucket: bucket['doc_count']
+            return None, selector
+        else:
             count_keyword = sql_function.tokens[1].token_next_by_type(0, ttypes.Keyword)
             selector = lambda bucket: bucket[projection_name]['value']
             if count_keyword:
                 if 'DISTINCT' == count_keyword.value.upper():
-                    request = {'cardinality': {'field': params[0].get_name()}}
+                    request = {'cardinality': {'field': params[0].value}}
                     return request, selector
                 else:
                     raise Exception('unexpected: %s' % repr(count_keyword))
             else:
-                request = {'value_count': {'field': params[0].get_name()}}
+                request = {'value_count': {'field': params[0].value}}
                 return request, selector
-        else:
-            selector = lambda bucket: bucket['doc_count']
-            return None, selector
     elif sql_function_name in ('MAX', 'MIN', 'AVG', 'SUM'):
         if len(sql_function.get_parameters()) != 1:
             raise Exception('unexpected: %s' % repr(sql_function))

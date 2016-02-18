@@ -720,14 +720,7 @@ class Function(TokenList):
     def get_parameters(self):
         """Return a list of parameters."""
         parenthesis = self.tokens[-1]
-        for t in parenthesis.tokens:
-            if isinstance(t, IdentifierList):
-                return t.get_identifiers()
-            elif (isinstance(t, Identifier) or
-                      isinstance(t, Function) or
-                          t.ttype in T.Literal):
-                return [t, ]
-        return []
+        return parenthesis.tokens[1:-1]
 
 
 class Begin(TokenList):
