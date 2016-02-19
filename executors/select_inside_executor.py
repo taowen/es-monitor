@@ -65,9 +65,13 @@ class SelectInsideExecutor(object):
         if group_by_names:
             for group_by_name in group_by_names:
                 group_by = self.sql_select.group_by.get(group_by_name)
+                if isinstance(group_by, stypes.Parenthesis):
+                    if len(group_by.tokens > 3):
+                        raise Exception('unexpected: %s' % group_by)
+                    group_by = group_by.tokens[1]
                 if group_by.ttype in (ttypes.Name, ttypes.String.Symbol):
                     current_aggs = self.append_terms_aggs(current_aggs, group_by_name)
-                elif isinstance(group_by, stypes.Parenthesis):
+                elif isinstance(group_by, stypes.Case):
                     current_aggs = self.append_range_aggs(current_aggs, group_by, group_by_name)
                 elif isinstance(group_by, stypes.Function):
                     sql_function_name = group_by.tokens[0].value.upper()
@@ -138,16 +142,11 @@ class SelectInsideExecutor(object):
         }
         return current_aggs
 
-    def append_range_aggs(self, current_aggs, group_by, group_by_name):
-        tokens = group_by.tokens[0].tokens[1:-1]
-        if len(tokens) == 1 and isinstance(tokens[0], stypes.Case):
-            case_when = tokens[0]
-            case_when_aggs = case_when_translator.translate_case_when(case_when)
-            current_aggs = {
-                'aggs': {group_by_name: dict(current_aggs, **case_when_aggs)}
-            }
-        else:
-            raise Exception('unexpected: %s' % repr(tokens[0]))
+    def append_range_aggs(self, current_aggs, case_when, group_by_name):
+        case_when_aggs = case_when_translator.translate_case_when(case_when)
+        current_aggs = {
+            'aggs': {group_by_name: dict(current_aggs, **case_when_aggs)}
+        }
         return current_aggs
 
     def collect_records(self, rows, parent_bucket, group_by_names, props):

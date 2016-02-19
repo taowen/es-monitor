@@ -66,7 +66,7 @@ class CaseWhenNumericRangeTranslator(object):
                 current_range['to'] = filter_translator.eval_numeric_value(str(token.right))
             else:
                 raise Exception('unexpected: %s' % token)
-            self.set_field(token.left.get_name())
+            self.set_field(token.left.as_field_name())
         else:
             raise Exception('unexpected: %s' % token)
 

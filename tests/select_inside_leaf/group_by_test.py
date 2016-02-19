@@ -41,7 +41,35 @@ class SelectInsideLeafGroupByTest(unittest.TestCase):
 
     def test_group_by_histogram(self):
         executor = es_query.create_executor(
-            "select ipo_year_range, count(*) from symbol group by histogram(ipo_year, 5) as ipo_year_range")
+            "SELECT ipo_year_range, COUNT(*) FROM symbol "
+            "GROUP BY histogram(ipo_year, 5) AS ipo_year_range")
         self.assertEqual(
             {'aggs': {'ipo_year_range': {'aggs': {}, 'histogram': {'field': 'ipo_year', 'interval': 5}}}, 'size': 0},
+            executor.request)
+
+    def test_group_by_numeric_range(self):
+        executor = es_query.create_executor(
+            "SELECT ipo_year_range, COUNT(*) FROM symbol "
+            "GROUP BY CASE "
+            "  WHEN ipo_year_range >= 2000 THEN 'post_2000' "
+            "  WHEN ipo_year_range < 2000 THEN 'pre_2000' END AS ipo_year_range")
+        self.assertEqual(
+            {'aggs': {'ipo_year_range': {
+                'range': {'ranges': [{'from': 2000.0, 'key': 'post_2000'}, {'to': 2000.0, 'key': 'pre_2000'}],
+                          'field': 'ipo_year_range'}, 'aggs': {}}}, 'size': 0},
+            executor.request)
+
+    def test_group_by_filters(self):
+        executor = es_query.create_executor(
+            "SELECT ipo_year_range, COUNT(*) FROM symbol "
+            "GROUP BY CASE "
+            "  WHEN ipo_year_range > 2000 THEN 'post_2000' "
+            "  WHEN ipo_year_range < 2000 THEN 'pre_2000'"
+            "  ELSE '2000' END AS ipo_year_range")
+        self.assertEqual(
+            {'aggs': {'ipo_year_range': {'filters': {
+                'filters': {'pre_2000': {'range': {'ipo_year_range': {'lt': 2000}}},
+                            'post_2000': {'range': {'ipo_year_range': {'gt': 2000}}}},
+                'other_bucket_key': '2000'},
+                'aggs': {}}}, 'size': 0},
             executor.request)
