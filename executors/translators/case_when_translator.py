@@ -23,7 +23,7 @@ class CaseWhenNumericRangeTranslator(object):
         while idx < len(tokens):
             token = tokens[idx]
             idx += 1
-            if token.ttype in (ttypes.Whitespace, ttypes.Comment):
+            if token.is_whitespace():
                 continue
             if 'WHEN' == token.value.upper():
                 idx = self.on_WHEN(tokens, idx)
@@ -102,7 +102,7 @@ class CaseWhenFiltersTranslator(object):
         while idx < len(tokens):
             token = tokens[idx]
             idx += 1
-            if token.ttype in (ttypes.Whitespace, ttypes.Comment):
+            if token.is_whitespace():
                 continue
             if 'WHEN' == token.value.upper():
                 idx = self.on_WHEN(tokens, idx)
@@ -120,7 +120,7 @@ class CaseWhenFiltersTranslator(object):
         while idx < len(tokens):
             token = tokens[idx]
             idx += 1
-            if token.ttype in (ttypes.Whitespace, ttypes.Comment):
+            if token.is_whitespace():
                 continue
             if ttypes.Keyword == token.ttype and 'THEN' == token.value.upper():
                 idx = skip_whitespace(tokens, idx + 1)
@@ -159,7 +159,7 @@ class CaseWhenFiltersTranslator(object):
 def skip_whitespace(tokens, idx):
     while idx < len(tokens):
         token = tokens[idx]
-        if token.ttype in (ttypes.Whitespace, ttypes.Comment):
+        if token.is_whitespace():
             idx += 1
             continue
         else:

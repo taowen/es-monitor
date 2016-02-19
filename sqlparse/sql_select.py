@@ -55,7 +55,7 @@ class SqlSelect(object):
         while idx < len(tokens):
             token = tokens[idx]
             idx += 1
-            if token.ttype in (ttypes.Whitespace, ttypes.Comment):
+            if token.is_whitespace():
                 continue
             if ttypes.Keyword == token.ttype:
                 if token.value.upper() in ('FROM', 'INSIDE'):
@@ -107,7 +107,7 @@ class SqlSelect(object):
         while idx < len(tokens):
             token = tokens[idx]
             idx += 1
-            if token.ttype in (ttypes.Whitespace, ttypes.Comment):
+            if token.is_whitespace():
                 continue
             if ttypes.Name == token.ttype:
                 self.source = token.value
@@ -128,7 +128,7 @@ class SqlSelect(object):
         while idx < len(tokens):
             token = tokens[idx]
             idx += 1
-            if token.ttype in (ttypes.Whitespace, ttypes.Comment):
+            if token.is_whitespace():
                 continue
             self.limit = int(token.value)
             break
@@ -149,7 +149,7 @@ class SqlSelect(object):
         while idx < len(tokens):
             token = tokens[idx]
             idx += 1
-            if token.ttype in (ttypes.Whitespace, ttypes.Comment):
+            if token.is_whitespace():
                 continue
             if ttypes.Keyword == token.ttype:
                 if 'BY' == token.value.upper():
@@ -161,7 +161,7 @@ class SqlSelect(object):
         while idx < len(tokens):
             token = tokens[idx]
             idx += 1
-            if token.ttype in (ttypes.Whitespace, ttypes.Comment):
+            if token.is_whitespace():
                 continue
             self.group_by = OrderedDict()
             if isinstance(token, stypes.IdentifierList):
@@ -189,7 +189,7 @@ class SqlSelect(object):
         while idx < len(tokens):
             token = tokens[idx]
             idx += 1
-            if token.ttype in (ttypes.Whitespace, ttypes.Comment):
+            if token.is_whitespace():
                 continue
             if ttypes.Keyword == token.ttype:
                 if 'BY' == token.value.upper():
@@ -201,7 +201,7 @@ class SqlSelect(object):
         while idx < len(tokens):
             token = tokens[idx]
             idx += 1
-            if token.ttype in (ttypes.Whitespace, ttypes.Comment):
+            if token.is_whitespace():
                 continue
             if isinstance(token, stypes.IdentifierList):
                 self.order_by = list(token.get_identifiers())

@@ -59,5 +59,6 @@ def _translate(variables, agg, tokens):
 
 def is_count_star(projection):
     return isinstance(projection, stypes.Function) \
-           and 'COUNT' == projection.tokens[0].get_name().upper() \
-           and not projection.get_parameters()
+           and 'COUNT' == projection.tokens[0].as_field_name().upper() \
+           and 1 == len(projection.get_parameters()) \
+           and ttypes.Wildcard == projection.get_parameters()[0].ttype

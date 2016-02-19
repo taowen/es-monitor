@@ -18,7 +18,7 @@ def create_compound_filter(tokens):
     while idx < len(tokens):
         token = tokens[idx]
         idx += 1
-        if token.ttype in (ttypes.Whitespace, ttypes.Comment):
+        if token.is_whitespace():
             continue
         if isinstance(token, stypes.Comparison) or isinstance(token, stypes.Parenthesis):
             if isinstance(token, stypes.Comparison):

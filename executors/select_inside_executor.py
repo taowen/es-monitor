@@ -22,14 +22,15 @@ class SelectInsideExecutor(object):
         if self.sql_select.order_by or self.sql_select.limit:
             if len(self.sql_select.group_by or {}) != 1:
                 raise Exception('order by can only be applied on single group by')
-            aggs = self.request['aggs'][reversed_group_by_names[0]]
+            group_by_name = reversed_group_by_names[0]
+            aggs = self.request['aggs'][group_by_name]
             agg_names = set(aggs.keys()) - set(['aggs'])
             if len(agg_names) != 1:
                 raise Exception('order by can only be applied on single group by')
             agg_type = list(agg_names)[0]
             agg = aggs[agg_type]
             if self.sql_select.order_by:
-                agg['order'] = sort_translator.translate_sort(reversed_group_by_names[0], agg_type)
+                agg['order'] = sort_translator.translate_sort(self.sql_select, (agg_type, group_by_name))
             if self.sql_select.limit:
                 agg['size'] = self.sql_select.limit
 
