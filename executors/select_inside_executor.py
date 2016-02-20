@@ -2,7 +2,8 @@ from sqlparse import sql as stypes
 from sqlparse import tokens as ttypes
 from translators import case_when_translator
 from translators import filter_translator
-from translators import script_translator
+from translators import bucket_script_translator
+from translators import doc_script_translator
 from translators import sort_translator
 from translators import metric_translator
 from merge_aggs import merge_aggs
@@ -61,7 +62,7 @@ class SelectInsideExecutor(object):
             current_aggs = {'aggs': self.metric_request}
         if self.sql_select.having:
             current_aggs['aggs']['having'] = {
-                'bucket_selector': script_translator.translate_script(self.sql_select, self.sql_select.having)
+                'bucket_selector': bucket_script_translator.translate_script(self.sql_select, self.sql_select.having)
             }
         if group_by_names:
             for group_by_name in group_by_names:
@@ -81,7 +82,9 @@ class SelectInsideExecutor(object):
                     elif 'HISTOGRAM' == sql_function_name:
                         current_aggs = self.append_histogram_aggs(current_aggs, group_by, group_by_name)
                     else:
-                        raise Exception('unsupported group by on %s' % sql_function_name)
+                        current_aggs = self.append_terms_aggs_with_script(current_aggs, group_by, group_by_name)
+                elif isinstance(group_by, stypes.Expression):
+                    current_aggs = self.append_terms_aggs_with_script(current_aggs, group_by, group_by_name)
                 elif isinstance(group_by, stypes.Where):
                     current_aggs = self.append_filter_aggs(current_aggs, group_by)
                 else:
@@ -92,6 +95,16 @@ class SelectInsideExecutor(object):
         current_aggs = {
             'aggs': {group_by_name: dict(current_aggs, **{
                 'terms': {'field': group_by_name, 'size': 0}
+            })}
+        }
+        return current_aggs
+
+    def append_terms_aggs_with_script(self, current_aggs, group_by, group_by_name):
+        script = doc_script_translator.translate_script([group_by])
+        script['size'] = 0
+        current_aggs = {
+            'aggs': {group_by_name: dict(current_aggs, **{
+                'terms': script
             })}
         }
         return current_aggs

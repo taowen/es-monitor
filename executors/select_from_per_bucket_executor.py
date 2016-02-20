@@ -1,4 +1,4 @@
-from translators import script_translator
+from translators import bucket_script_translator
 from translators import filter_translator
 from sqlparse import sql as stypes
 from sqlparse import tokens as ttypes
@@ -10,7 +10,7 @@ class SelectFromPerBucketExecutor(object):
         self.inner_executor = inner_executor
         self.parent_pipeline_aggs = {}
         if sql_select.having:
-            bucket_selector_agg = script_translator.translate_script(
+            bucket_selector_agg = bucket_script_translator.translate_script(
                     sql_select, sql_select.having,
                     include_sub_aggregation=True)
             self.parent_pipeline_aggs['having'] = {'bucket_selector': bucket_selector_agg}
@@ -36,7 +36,7 @@ class SelectFromPerBucketExecutor(object):
                 tokens = projection.tokens
                 if isinstance(tokens[0], stypes.Parenthesis):
                     tokens = tokens[0].tokens[1:-1]
-                bucket_script_agg = script_translator.translate_script(
+                bucket_script_agg = bucket_script_translator.translate_script(
                         sql_select, tokens,
                         include_sub_aggregation=True)
                 self.parent_pipeline_aggs[projection_name] = {'bucket_script': bucket_script_agg}

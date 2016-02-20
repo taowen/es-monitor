@@ -143,6 +143,9 @@ class Token(object):
             return self.value
         raise Exception('not field: %s' % self)
 
+    def is_field(self):
+        return self.ttype in [T.String.Symbol, T.Name]
+
 
 class TokenList(Token):
     """A group of tokens.
@@ -731,6 +734,9 @@ class Function(TokenList):
             if isinstance(t, IdentifierList):
                 return t.get_identifiers()
         return [t for t in parenthesis.tokens[1:-1] if t.ttype != T.Punctuation]
+
+    def get_function_name(self):
+        return self.tokens[0].value
 
 
 

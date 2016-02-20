@@ -73,3 +73,34 @@ class SelectInsideLeafGroupByTest(unittest.TestCase):
                 'other_bucket_key': '2000'},
                 'aggs': {}}}, 'size': 0},
             executor.request)
+
+    def test_group_by_single_value_script(self):
+        executor = es_query.create_executor(
+            "SELECT ipo_year_range, COUNT(*) FROM symbol GROUP BY ipo_year / 6 AS ipo_year_range")
+        self.assertEqual(
+            {'aggs': {'ipo_year_range': {
+                'terms': {'field': 'ipo_year', 'size': 0, 'script': {'lang': 'expression', 'inline': '_value / 6'}},
+                'aggs': {}}}, 'size': 0},
+            executor.request)
+
+    def test_group_by_multiple_values_script(self):
+        executor = es_query.create_executor(
+            "SELECT shares_count, COUNT(*) FROM symbol GROUP BY market_cap / last_sale AS shares_count")
+        self.assertEqual(
+            {'aggs': {'shares_count': {
+                'terms': {'size': 0, 'script': {
+                    'lang': 'expression',
+                    'inline': "doc['market_cap'].value / doc['last_sale'].value"}},
+                'aggs': {}}}, 'size': 0},
+            executor.request)
+
+    def test_group_by_function(self):
+        executor = es_query.create_executor(
+            "SELECT shares_count, COUNT(*) FROM symbol GROUP BY floor(market_cap / last_sale) AS shares_count")
+        self.assertEqual(
+            {'aggs': {'shares_count': {
+                'terms': {'size': 0, 'script': {
+                    'lang': 'expression',
+                    'inline': "floor(doc['market_cap'].value / doc['last_sale'].value)"}},
+                'aggs': {}}}, 'size': 0},
+            executor.request)

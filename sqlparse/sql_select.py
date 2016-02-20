@@ -173,6 +173,8 @@ class SqlSelect(object):
                     raise Exception('%s is keyword' % id.value)
                 elif ttypes.Name == id.ttype:
                     self.group_by[id.value] = id
+                elif isinstance(id, stypes.Expression):
+                    self.group_by[id.value] = id
                 elif isinstance(id, stypes.Identifier):
                     if isinstance(id.tokens[0], stypes.Parenthesis):
                         striped = id.tokens[0].strip_parenthesis()

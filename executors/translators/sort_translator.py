@@ -1,4 +1,4 @@
-import script_translator
+import bucket_script_translator
 from sqlparse import sql as stypes
 
 
@@ -14,7 +14,7 @@ def translate_sort(sql_select, agg=None):
         else:
             field_name = id.as_field_name()
             projection = sql_select.projections.get(field_name)
-        if projection and script_translator.is_count_star(projection):
+        if projection and bucket_script_translator.is_count_star(projection):
             sort.append({'_count': asc_or_desc})
         elif agg and field_name == agg[1]:
             if 'terms' == agg[0]:

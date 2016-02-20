@@ -1,5 +1,5 @@
 from sqlparse import sql as stypes
-from translators import script_translator
+from translators import bucket_script_translator
 
 FUNC_NAMES = ('SUM', 'AVG', 'MAX', 'MIN', 'STATS', 'EXTENDED_STATS', 'PERCENTILES')
 
@@ -10,7 +10,7 @@ class SelectFromAllBucketsExecutor(object):
         self.inner_executor = inner_executor
         self.sibling_pipeline_aggs = self.build_sibling_pipeline_aggs()
         if sql_select.where:
-            bucket_selector_agg = script_translator.translate_script(
+            bucket_selector_agg = bucket_script_translator.translate_script(
                     sql_select, sql_select.where.tokens[1:],
                     include_sub_aggregation=True)
             self.parent_pipeline_aggs = {'having': {'bucket_selector': bucket_selector_agg}}
@@ -46,7 +46,7 @@ class SelectFromAllBucketsExecutor(object):
                 inner_most = self.sql_select.inner_most
                 projection = inner_most.projections.get(params[0].get_name())
                 bucket_key = '>'.join(inner_most.group_by.keys())
-                metric_name = '_count' if script_translator.is_count_star(projection) else projection.get_name()
+                metric_name = '_count' if bucket_script_translator.is_count_star(projection) else projection.get_name()
                 if not bucket_key:
                     raise Exception('select from all buckets must nested with group by')
                 buckets_path = '%s.%s' % (bucket_key, metric_name)
