@@ -7,6 +7,7 @@ from translators import doc_script_translator
 from translators import sort_translator
 from translators import metric_translator
 from merge_aggs import merge_aggs
+from sqlparse.ordereddict import OrderedDict
 
 
 class SelectInsideExecutor(object):
@@ -17,7 +18,6 @@ class SelectInsideExecutor(object):
         self.metric_request, self.metric_selector = metric_translator.translate_metrics(sql_select)
 
     def add_child(self, executor):
-        executor.build_request()
         self.children.append(executor)
 
     def build_request(self):
@@ -41,10 +41,13 @@ class SelectInsideExecutor(object):
         self.add_children_aggs()
 
     def add_children_aggs(self):
+        if not self.children:
+            return
         aggs = self.request['aggs']
         for bucket_key in self.sql_select.group_by.keys():
             aggs = aggs[bucket_key]['aggs']
         for child_executor in self.children:
+            child_executor.build_request()
             child_aggs = child_executor.request['aggs']
             aggs.update(child_aggs)
 
@@ -54,19 +57,28 @@ class SelectInsideExecutor(object):
         all_rows = []
         for bucket, inner_row in buckets:
             rows = []
-            sibling = {}
-            sibling_keys = set(bucket.keys()) - set(group_by_names)
-            for sibling_key in sibling_keys:
-                if isinstance(bucket[sibling_key], dict) and 'value' in bucket[sibling_key]:
-                    sibling[sibling_key] = bucket[sibling_key]['value']
-            self.collect_records(rows, bucket, group_by_names, {})
-            for row in rows:
-                row.update(sibling)
-                row.update(inner_row)
+            self.collect_records(rows, bucket, group_by_names, inner_row)
             all_rows.extend(rows)
-        if self.children:
+        all_rows = self.pass_response_to_children(all_rows)
+        for row in all_rows:
+            filtered = row.pop('_filtered_', {})
+            filtered.pop('_bucket_', None)
+            row.update(filtered)
+        return all_rows
+
+    def pass_response_to_children(self, all_rows):
+        filter_children = []
+        drill_down_children = []
+        for child_executor in self.children:
+            if child_executor.is_filter_only():
+                filter_children.append(child_executor)
+            else:
+                drill_down_children.append(child_executor)
+        for child_executor in filter_children:
+            child_executor.select_response(all_rows)
+        if drill_down_children:
             children_rows = []
-            for child_executor in self.children:
+            for child_executor in drill_down_children:
                 children_rows.extend(child_executor.select_response(all_rows))
             return children_rows
         else:
@@ -105,7 +117,7 @@ class SelectInsideExecutor(object):
                 elif isinstance(group_by, stypes.Expression):
                     current_aggs = self.append_terms_aggs_with_script(current_aggs, group_by, group_by_name)
                 elif isinstance(group_by, stypes.Where):
-                    current_aggs = self.append_filter_aggs(current_aggs, group_by)
+                    current_aggs = self.append_filter_aggs(current_aggs, group_by, group_by_name)
                 else:
                     raise Exception('unexpected: %s' % repr(group_by))
         self.request.update(current_aggs)
@@ -166,10 +178,10 @@ class SelectInsideExecutor(object):
         }
         return current_aggs
 
-    def append_filter_aggs(self, current_aggs, where):
+    def append_filter_aggs(self, current_aggs, where, group_by_name):
         filter = filter_translator.create_compound_filter(where.tokens[1:])
         current_aggs = {
-            'aggs': {self.sql_select.filter_bucket_key: dict(current_aggs, **{
+            'aggs': {group_by_name: dict(current_aggs, **{
                 'filter': filter
             })}
         }
@@ -214,17 +226,37 @@ class SelectInsideBranchExecutor(SelectInsideExecutor):
     def __init__(self, sql_select, executor_name):
         super(SelectInsideBranchExecutor, self).__init__(sql_select)
         self.executor_name = executor_name
+        self._is_filter_only = len(self.sql_select.group_by) == 0
+        if self.sql_select.where:
+            old_group_by = self.sql_select.group_by
+            self.sql_select.group_by = OrderedDict()
+            self.sql_select.group_by[self.executor_name] = self.sql_select.where
+            for key in old_group_by.keys():
+                self.sql_select.group_by[key] = old_group_by[key]
+            self.sql_select.where = None
+
+    def is_filter_only(self):
+        return self._is_filter_only and all(child_executor.is_filter_only() for child_executor in self.children)
+
 
     def select_buckets(self, response):
         # response is selected from inner executor
-        buckets = []
-        for inner_row in response:
-            inner_row = dict(inner_row)
-            inner_row['_path'] = list(inner_row.get('_path', []))
-            inner_row['_path'].append(self.executor_name)
-            bucket = inner_row.get('_bucket_')
-            buckets.append((bucket, inner_row))
-        return buckets
+        if self.is_filter_only():
+            buckets = []
+            for parent_row in response:
+                bucket = parent_row.get('_bucket_')
+                parent_row['_filtered_'] = parent_row.get('_filtered_', {})
+                buckets.append((bucket, parent_row['_filtered_']))
+            return buckets
+        else:
+            buckets = []
+            for parent_row in response:
+                child_row = dict(parent_row)
+                child_row['_bucket_path'] = list(child_row.get('_bucket_path', []))
+                child_row['_bucket_path'].append(self.executor_name)
+                bucket = child_row.get('_bucket_')
+                buckets.append((bucket, child_row))
+            return buckets
 
 
 class SelectInsideLeafExecutor(SelectInsideExecutor):
