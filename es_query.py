@@ -7,6 +7,7 @@ Query elasticsearch using SQL
 import json
 import sys
 import urllib2
+import re
 
 import sqlparse
 from executors import SelectFromAllBucketsExecutor
@@ -25,29 +26,41 @@ def execute_sql(es_hosts, sql):
     global ES_HOSTS
 
     ES_HOSTS = es_hosts
-    rows = create_executor(sql).execute()
-    for row in rows:
-        row.pop('_bucket_', None)
-    return rows
+    return create_executor(sql.split(';')).execute()
 
 
-def create_executor(sql_select):
-    if isinstance(sql_select, basestring):
-        sql_select = SqlSelect.parse(sql_select.strip())
-    if isinstance(sql_select.source, basestring):
-        if sql_select.is_select_inside:
-            return SelectInsideLeafExecutor(sql_select, search_es)
+def create_executor(sql_selects):
+    executor_map = {}
+    if not isinstance(sql_selects, list):
+        sql_selects = [sql_selects]
+    root_executor = None
+    for sql_select in sql_selects:
+        sql_select = sql_select.strip()
+        if not sql_select:
+            continue
+        match = re.match(r'^WITH\s+(.*)\s+AS\s+(.*)', sql_select, re.IGNORECASE)
+        executor_name = None
+        if match:
+            sql_select = match.group(1)
+            executor_name = match.group(2)
+        sql_select = SqlSelect.parse(sql_select)
+        if not isinstance(sql_select.source, basestring):
+            raise Exception('nested SELECT is not supported')
+        if sql_select.source in executor_map:
+            parent_executor = executor_map[sql_select.source]
+            executor = SelectInsideBranchExecutor(sql_select)
+            parent_executor.add_child(executor)
         else:
-            return SelectFromLeafExecutor(sql_select, search_es)
-    elif sql_select.is_select_inside:
-        return SelectInsideBranchExecutor(sql_select, create_executor(sql_select.source))
-    else:
-        if SelectFromInMemExecutor.is_in_mem_computation(sql_select):
-            return SelectFromInMemExecutor(sql_select, create_executor(sql_select.source))
-        elif SelectFromAllBucketsExecutor.is_select_from_all_buckets(sql_select):
-            return SelectFromAllBucketsExecutor(sql_select, create_executor(sql_select.source))
-        else:
-            return SelectFromPerBucketExecutor(sql_select, create_executor(sql_select.source))
+            if sql_select.is_select_inside:
+                executor = SelectInsideLeafExecutor(sql_select, search_es)
+            else:
+                executor = SelectFromLeafExecutor(sql_select, search_es)
+            if root_executor:
+                raise Exception('multiple root executor is not supported')
+            root_executor = executor
+        executor_map[executor_name] = executor
+    root_executor.build_request()
+    return root_executor
 
 
 def search_es(index, request):

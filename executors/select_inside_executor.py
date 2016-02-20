@@ -13,8 +13,12 @@ class SelectInsideExecutor(object):
     def __init__(self, sql_select):
         self.sql_select = sql_select
         self.request = {}
+        self.children = []
         self.metric_request, self.metric_selector = metric_translator.translate_metrics(sql_select)
-        self.build_request()
+
+    def add_child(self, executor):
+        executor.build_request()
+        self.children.append(executor)
 
     def build_request(self):
         self.request['size'] = 0  # do not need hits in response
@@ -34,6 +38,15 @@ class SelectInsideExecutor(object):
                 agg['order'] = sort_translator.translate_sort(self.sql_select, (agg_type, group_by_name))
             if self.sql_select.limit:
                 agg['size'] = self.sql_select.limit
+        self.add_children_aggs()
+
+    def add_children_aggs(self):
+        aggs = self.request['aggs']
+        for bucket_key in self.sql_select.group_by.keys():
+            aggs = aggs[bucket_key]['aggs']
+        for child_executor in self.children:
+            child_aggs = child_executor.request['aggs']
+            aggs.update(child_aggs)
 
     def select_response(self, response):
         group_by_names = self.sql_select.group_by.keys() if self.sql_select.group_by else []
@@ -51,7 +64,13 @@ class SelectInsideExecutor(object):
                 row.update(sibling)
                 row.update(inner_row)
             all_rows.extend(rows)
-        return all_rows
+        if self.children:
+            children_rows = []
+            for child_executor in self.children:
+                children_rows.extend(child_executor.select_response(all_rows))
+            return children_rows
+        else:
+            return all_rows
 
     def select_buckets(self, response):
         raise Exception('base class')
@@ -192,34 +211,14 @@ class SelectInsideExecutor(object):
 
 
 class SelectInsideBranchExecutor(SelectInsideExecutor):
-    def __init__(self, sql_select, inner_executor):
+    def __init__(self, sql_select):
         super(SelectInsideBranchExecutor, self).__init__(sql_select)
-        self.inner_executor = inner_executor
-
-    def execute(self, inside_aggs=None, parent_pipeline_aggs=None, sibling_pipeline_aggs=None):
-        next_level_sibling_pipeline_aggs = None
-        next_level_parent_pipeline_aggs = None
-        if self.sql_select.source.is_select_inside:
-            next_level_sibling_pipeline_aggs = sibling_pipeline_aggs
-            sibling_pipeline_aggs = None
-            next_level_parent_pipeline_aggs = parent_pipeline_aggs
-            parent_pipeline_aggs = None
-        merge_aggs(
-                self.sql_select, self.request['aggs'],
-                inside_aggs=inside_aggs,
-                parent_pipeline_aggs=parent_pipeline_aggs,
-                sibling_pipeline_aggs=sibling_pipeline_aggs)
-        response = self.inner_executor.execute(
-                inside_aggs=self.request['aggs'],
-                sibling_pipeline_aggs=next_level_sibling_pipeline_aggs,
-                parent_pipeline_aggs=next_level_parent_pipeline_aggs)
-        return self.select_response(response)
 
     def select_buckets(self, response):
         # response is selected from inner executor
         buckets = []
         for inner_row in response:
-            bucket = inner_row.pop('_bucket_')
+            bucket = inner_row.get('_bucket_')
             buckets.append((bucket, inner_row))
         return buckets
 
@@ -229,14 +228,15 @@ class SelectInsideLeafExecutor(SelectInsideExecutor):
         super(SelectInsideLeafExecutor, self).__init__(sql_select)
         self.search_es = search_es
 
-    def execute(self, inside_aggs=None, parent_pipeline_aggs=None, sibling_pipeline_aggs=None):
-        merge_aggs(
-                self.sql_select, self.request['aggs'],
-                inside_aggs=inside_aggs,
-                parent_pipeline_aggs=parent_pipeline_aggs,
-                sibling_pipeline_aggs=sibling_pipeline_aggs)
+    def execute(self):
         response = self.search_es(self.sql_select.source, self.request)
         return self.select_response(response)
+
+    def select_response(self, response):
+        rows = super(SelectInsideLeafExecutor, self).select_response(response)
+        for row in rows:
+            row.pop('_bucket_', None)
+        return rows
 
     def build_request(self):
         super(SelectInsideLeafExecutor, self).build_request()
