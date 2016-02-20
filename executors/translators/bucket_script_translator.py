@@ -25,6 +25,8 @@ def translate_script(sql_select, tokens, include_sub_aggregation=False):
         for variable_name, projection in include_sql_select.projections.iteritems():
             if is_count_star(projection):
                 variables[variable_name] = '_count'
+            elif variable_name in include_sql_select.group_by:
+                variables[variable_name] = '_key'
             else:
                 variables[variable_name] = variable_name
     agg = {'buckets_path': {}, 'script': {'lang': 'expression', 'inline': ''}}
