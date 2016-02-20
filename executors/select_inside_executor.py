@@ -211,13 +211,17 @@ class SelectInsideExecutor(object):
 
 
 class SelectInsideBranchExecutor(SelectInsideExecutor):
-    def __init__(self, sql_select):
+    def __init__(self, sql_select, executor_name):
         super(SelectInsideBranchExecutor, self).__init__(sql_select)
+        self.executor_name = executor_name
 
     def select_buckets(self, response):
         # response is selected from inner executor
         buckets = []
         for inner_row in response:
+            inner_row = dict(inner_row)
+            inner_row['_path'] = list(inner_row.get('_path', []))
+            inner_row['_path'].append(self.executor_name)
             bucket = inner_row.get('_bucket_')
             buckets.append((bucket, inner_row))
         return buckets

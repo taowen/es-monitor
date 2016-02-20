@@ -34,7 +34,9 @@ def create_executor(sql_selects):
     if not isinstance(sql_selects, list):
         sql_selects = [sql_selects]
     root_executor = None
+    level = 0
     for sql_select in sql_selects:
+        level += 1
         sql_select = sql_select.strip()
         if not sql_select:
             continue
@@ -43,12 +45,14 @@ def create_executor(sql_selects):
         if match:
             sql_select = match.group(1)
             executor_name = match.group(2)
+        else:
+            executor_name = 'level%s' % level
         sql_select = SqlSelect.parse(sql_select)
         if not isinstance(sql_select.source, basestring):
             raise Exception('nested SELECT is not supported')
         if sql_select.source in executor_map:
             parent_executor = executor_map[sql_select.source]
-            executor = SelectInsideBranchExecutor(sql_select)
+            executor = SelectInsideBranchExecutor(sql_select, executor_name)
             parent_executor.add_child(executor)
         else:
             if sql_select.is_select_inside:

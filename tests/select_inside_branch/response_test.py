@@ -68,11 +68,11 @@ class SelectInsideBranchResponseTest(unittest.TestCase):
             "timed_out": False
         })
         self.assertEqual(
-            [{'max_this_year': 54171930444.0, 'max_all_times': 522690000000.0, u'ipo_year': 2014},
-             {'max_this_year': 5416144671.0, 'max_all_times': 522690000000.0, u'ipo_year': 2015},
-             {'max_this_year': 10264219758.0, 'max_all_times': 522690000000.0, u'ipo_year': 2013},
-             {'max_this_year': 287470000000.0, 'max_all_times': 522690000000.0, u'ipo_year': 2012},
-             {'max_this_year': 7436036210.0, 'max_all_times': 522690000000.0, u'ipo_year': 2011}],
+            [{'max_this_year': 54171930444.0, u'ipo_year': 2014, 'max_all_times': 522690000000.0, '_path': ['level2']},
+             {'max_this_year': 5416144671.0, u'ipo_year': 2015, 'max_all_times': 522690000000.0, '_path': ['level2']},
+             {'max_this_year': 10264219758.0, u'ipo_year': 2013, 'max_all_times': 522690000000.0, '_path': ['level2']},
+             {'max_this_year': 287470000000.0, u'ipo_year': 2012, 'max_all_times': 522690000000.0, '_path': ['level2']},
+             {'max_this_year': 7436036210.0, u'ipo_year': 2011, 'max_all_times': 522690000000.0, '_path': ['level2']}],
             rows)
 
     def test_two_children(self):
@@ -126,6 +126,6 @@ class SelectInsideBranchResponseTest(unittest.TestCase):
             "timed_out": False
         })
         self.assertEqual(
-            [{'max_this_year': 54171930444.0, u'ipo_year': 2014, 'max_all_times': 522690000000.0},
-             {u'sector': 'n/a', 'max_all_times': 522690000000.0, 'max_this_sector': 34620000000.0}],
+            [{'max_this_year': 54171930444.0, 'ipo_year': 2014, 'max_all_times': 522690000000.0, '_path': ['level2']},
+             {'sector': 'n/a', 'max_all_times': 522690000000.0, 'max_this_sector': 34620000000.0, '_path': ['level3']}],
             rows)
