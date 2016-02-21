@@ -8,6 +8,7 @@ import json
 import sys
 import urllib2
 import re
+import functools
 
 from executors import SelectFromLeafExecutor
 from executors import SelectInsideBranchExecutor
@@ -70,6 +71,7 @@ def create_executor(sql_selects, joinable_results=None):
             sql_select = SqlSelect.parse(sql_select)
         if joinable_results:
             sql_select.joinable_results = joinable_results
+        sql_select.joinable_queries = executor_map
         if not isinstance(sql_select.from_table, basestring):
             raise Exception('nested SELECT is not supported')
         if sql_select.from_table in executor_map:
@@ -77,23 +79,27 @@ def create_executor(sql_selects, joinable_results=None):
             executor = SelectInsideBranchExecutor(sql_select, executor_name)
             parent_executor.add_child(executor)
         else:
+            _search_es = search_es
+            if sql_select.join_table in executor_map:
+                _search_es = functools.partial(search_es, search_url='_coordinate_search')
             if sql_select.is_select_inside:
-                executor = SelectInsideLeafExecutor(sql_select, search_es)
+                executor = SelectInsideLeafExecutor(sql_select, _search_es)
             else:
-                executor = SelectFromLeafExecutor(sql_select, search_es)
+                executor = SelectFromLeafExecutor(sql_select, _search_es)
             if root_executor:
-                raise Exception('multiple root executor is not supported')
-            root_executor = executor
+                if executor.sql_select.join_table != root_executor[0]:
+                    raise Exception('multiple root executor is not supported')
+            root_executor = (executor_name, executor)
         executor_map[executor_name] = executor
-    root_executor.build_request()
-    return root_executor
+    root_executor[1].build_request()
+    return root_executor[1]
 
 
-def search_es(index, request):
+def search_es(index, request, search_url='_search'):
     if DEBUG:
-        print('=====')
+        print('===== %s' % search_url)
         print(json.dumps(request, indent=2))
-    url = ES_HOSTS + '/%s*/_search' % index
+    url = ES_HOSTS + '/%s*/%s' % (index, search_url)
     try:
         resp = urllib2.urlopen(url, json.dumps(request)).read()
     except urllib2.HTTPError as e:

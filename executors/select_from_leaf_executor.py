@@ -37,9 +37,14 @@ class SelectFromLeafExecutor(object):
         if self.sql_select.where:
             request['query'] = filter_translator.create_compound_filter(self.sql_select.where.tokens[1:])
         if self.sql_select.join_table:
-            request['query'] = {
-                'bool': {'filter': request.get('query', {}),
-                         'should': join_translator.translate_join(self.sql_select)}}
+            join_filters = join_translator.translate_join(self.sql_select)
+            if len(join_filters) == 1:
+                request['query'] = {
+                    'bool': {'filter': [request.get('query', {}), join_filters[0]]}}
+            else:
+                request['query'] = {
+                    'bool': {'filter': request.get('query', {}),
+                             'should': join_filters}}
         return request
 
     def select_response(self, response):

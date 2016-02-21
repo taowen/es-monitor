@@ -203,9 +203,14 @@ class SelectInsideLeafExecutor(SelectInsideExecutor):
         if self.sql_select.where:
             self.request['query'] = filter_translator.create_compound_filter(self.sql_select.where.tokens[1:])
         if self.sql_select.join_table:
-            self.request['query'] = {
-                'bool': {'filter': self.request.get('query', {}),
-                         'should': join_translator.translate_join(self.sql_select)}}
+            join_filters = join_translator.translate_join(self.sql_select)
+            if len(join_filters) == 1:
+                self.request['query'] = {
+                    'bool': {'filter': [self.request.get('query', {}), join_filters[0]]}}
+            else:
+                self.request['query'] = {
+                    'bool': {'filter': self.request.get('query', {}),
+                             'should': join_filters}}
 
     def select_buckets(self, response):
         # response is returned from elasticsearch
