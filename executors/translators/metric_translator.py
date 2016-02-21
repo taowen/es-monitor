@@ -8,8 +8,11 @@ def translate_metrics(sql_select):
     for projection_name, projection in sql_select.projections.iteritems():
         if projection_name in sql_select.group_by:
             continue
+        if ttypes.Wildcard == projection.ttype:
+            continue
         if not isinstance(projection, stypes.Function):
-            raise Exception('can only select group by fields or function in aggregation mode')
+            raise Exception('can only select group by fields or function in aggregation mode: %s'
+                            % sql_select.group_by.keys())
         request, selector = translate_metric(sql_select.buckets_names, projection, projection_name)
         if request:
             metric_request[projection_name] = request
@@ -49,6 +52,18 @@ def translate_metric(buckets_names, sql_function, projection_name):
             request = {'%s_bucket' % sql_function_name.lower(): {'buckets_path': buckets_path}}
         else:
             request = {sql_function_name.lower(): {'field': field_name}}
+        return request, selector
+    elif sql_function_name in ('CSUM', 'DERIVATIVE'):
+        selector = lambda bucket: bucket[projection_name]['value'] if projection_name in bucket else None
+        field_name = sql_function.get_parameters()[0].as_field_name()
+        buckets_path = buckets_names.get(field_name)
+        if not buckets_path:
+            raise Exception('field not found: %s' % field_name)
+        metric_type = {
+            'CSUM': 'cumulative_sum',
+            'DERIVATIVE': 'derivative'
+        }[sql_function_name]
+        request = {metric_type: {'buckets_path': buckets_path}}
         return request, selector
     else:
         raise Exception('unsupported function: %s' % repr(sql_function))

@@ -42,7 +42,11 @@ class SelectInsideExecutor(object):
         return buckets_names
 
     def format_buckets_path(self, buckets_path):
-        return '.'.join(['>'.join(buckets_path[:-1]), buckets_path[-1]])
+        prefix = '>'.join(buckets_path[:-1])
+        if prefix:
+            return '.'.join([prefix, buckets_path[-1]])
+        else:
+            return buckets_path[-1]
 
     def add_children_aggs(self):
         if not self.children:
