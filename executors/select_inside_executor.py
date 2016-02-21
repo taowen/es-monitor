@@ -189,7 +189,7 @@ class SelectInsideLeafExecutor(SelectInsideExecutor):
         self.search_es = search_es
 
     def execute(self):
-        response = self.search_es(self.sql_select.source, self.request)
+        response = self.search_es(self.sql_select.from_table, self.request)
         return self.select_response(response)
 
     def select_response(self, response):

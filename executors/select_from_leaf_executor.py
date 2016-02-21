@@ -25,7 +25,7 @@ class SelectFromLeafExecutor(object):
                     select_by_python_code, projection_name=projection_name, python_code=python_code))
 
     def execute(self):
-        response = self.search_es(self.sql_select.source, self.request)
+        response = self.search_es(self.sql_select.from_table, self.request)
         return self.select_response(response)
 
     def build_request(self):

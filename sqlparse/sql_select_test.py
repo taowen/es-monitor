@@ -14,7 +14,7 @@ class TestSqlSelectProjections(unittest.TestCase):
         sql_select = SqlSelect.parse('SELECT * FROM symbol')
         self.assertEqual(['*'], sql_select.projections.keys())
         self.assertEqual(ttypes.Wildcard, sql_select.projections['*'].ttype)
-        self.assertEqual('symbol', sql_select.source)
+        self.assertEqual('symbol', sql_select.from_table)
         self.assertIsNone(sql_select.where)
         self.assertEqual(dict(), sql_select.group_by)
         self.assertEqual([], sql_select.order_by)
@@ -27,7 +27,7 @@ class TestSqlSelectProjections(unittest.TestCase):
         self.assertEqual(stypes.Function, type(sql_select.projections['COUNT(*)']))
         self.assertEqual('COUNT', sql_select.projections['COUNT(*)'].get_name())
         self.assertEqual(ttypes.Wildcard, sql_select.projections['COUNT(*)'].get_parameters()[0].ttype)
-        self.assertEqual('symbol', sql_select.source)
+        self.assertEqual('symbol', sql_select.from_table)
         self.assertIsNone(sql_select.where)
         self.assertEqual(dict(), sql_select.group_by)
         self.assertEqual([], sql_select.order_by)
@@ -40,7 +40,7 @@ class TestSqlSelectProjections(unittest.TestCase):
         self.assertEqual(stypes.Function, type(sql_select.projections['abc']))
         self.assertEqual('COUNT', sql_select.projections['abc'].get_name())
         self.assertEqual(ttypes.Wildcard, sql_select.projections['abc'].get_parameters()[0].ttype)
-        self.assertEqual('symbol', sql_select.source)
+        self.assertEqual('symbol', sql_select.from_table)
         self.assertIsNone(sql_select.where)
         self.assertEqual(dict(), sql_select.group_by)
         self.assertEqual([], sql_select.order_by)
@@ -52,7 +52,7 @@ class TestSqlSelectProjections(unittest.TestCase):
         self.assertEqual(['abc'], sql_select.projections.keys())
         self.assertEqual(stypes.Expression, type(sql_select.projections['abc']))
         self.assertEqual('a/2', str(sql_select.projections['abc']))
-        self.assertEqual('symbol', sql_select.source)
+        self.assertEqual('symbol', sql_select.from_table)
         self.assertIsNone(sql_select.where)
         self.assertEqual(dict(), sql_select.group_by)
         self.assertEqual([], sql_select.order_by)
@@ -66,7 +66,7 @@ class TestSqlSelectProjections(unittest.TestCase):
         self.assertEqual('COUNT(*)/2', str(sql_select.projections['abc']))
         self.assertEqual('/', sql_select.projections['abc'].operator)
         self.assertEqual(stypes.Function, type(sql_select.projections['abc'].left))
-        self.assertEqual('symbol', sql_select.source)
+        self.assertEqual('symbol', sql_select.from_table)
         self.assertIsNone(sql_select.where)
         self.assertEqual(dict(), sql_select.group_by)
         self.assertEqual([], sql_select.order_by)
@@ -81,11 +81,11 @@ class TestSqlSelectProjections(unittest.TestCase):
 class TestSqlSelectSource(unittest.TestCase):
     def test_source_is_string(self):
         sql_select = SqlSelect.parse('SELECT * FROM symbol')
-        self.assertEqual('symbol', sql_select.source)
+        self.assertEqual('symbol', sql_select.from_table)
 
     def test_source_is_function(self):
         sql_select = SqlSelect.parse('SELECT * FROM index("symbol")')
-        self.assertEqual(stypes.Function, type(sql_select.source))
+        self.assertEqual(stypes.Function, type(sql_select.from_table))
 
     def test_source_not_support_as(self):
         try:

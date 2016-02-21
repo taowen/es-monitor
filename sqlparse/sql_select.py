@@ -7,7 +7,7 @@ from sqlparse.ordereddict import OrderedDict
 # make the result of sqlparse more usable
 class SqlSelect(object):
     def __init__(self, tokens):
-        self.source = None
+        self.from_table = None
         self.projections = {}
         self.group_by = OrderedDict()
         self.order_by = []
@@ -23,7 +23,7 @@ class SqlSelect(object):
 
         self.is_select_inside = False
         self.on_SELECT(tokens)
-        if isinstance(self.source, basestring):
+        if isinstance(self.from_table, basestring):
             if self.group_by or self.has_function_projection():
                 self.is_select_inside = True
 
@@ -34,7 +34,7 @@ class SqlSelect(object):
         return sql_select
 
     def tables(self):
-        map = {self.source: True}
+        map = {self.from_table: True}
         for t in self.joinable_results.keys():
             map[t] = False
         for t in self.joinable_queries.keys():
@@ -108,15 +108,15 @@ class SqlSelect(object):
             if token.is_whitespace():
                 continue
             if token.is_field():
-                self.source = token.as_field_name()
+                self.from_table = token.as_field_name()
                 break
             elif isinstance(token, stypes.Identifier):
                 if len(token.tokens) > 1:
                     raise Exception('unexpected: %s' % token)
-                self.source = token.get_name()
+                self.from_table = token.get_name()
                 break
             elif isinstance(token, stypes.Function):
-                self.source = token
+                self.from_table = token
                 break
             else:
                 raise Exception('unexpected: %s' % token)

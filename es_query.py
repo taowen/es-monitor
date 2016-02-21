@@ -70,10 +70,10 @@ def create_executor(sql_selects, joinable_results=None):
             sql_select = SqlSelect.parse(sql_select)
         if joinable_results:
             sql_select.joinable_results = joinable_results
-        if not isinstance(sql_select.source, basestring):
+        if not isinstance(sql_select.from_table, basestring):
             raise Exception('nested SELECT is not supported')
-        if sql_select.source in executor_map:
-            parent_executor = executor_map[sql_select.source]
+        if sql_select.from_table in executor_map:
+            parent_executor = executor_map[sql_select.from_table]
             executor = SelectInsideBranchExecutor(sql_select, executor_name)
             parent_executor.add_child(executor)
         else:
