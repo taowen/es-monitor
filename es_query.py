@@ -9,10 +9,6 @@ import sys
 import urllib2
 import re
 
-import sqlparse
-from executors import SelectFromAllBucketsExecutor
-from executors import SelectFromPerBucketExecutor
-from executors import SelectFromInMemExecutor
 from executors import SelectFromLeafExecutor
 from executors import SelectInsideBranchExecutor
 from executors import SelectInsideLeafExecutor
