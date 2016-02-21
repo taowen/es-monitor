@@ -20,6 +20,27 @@ def to_str(val):
         return str(val)
 
 
+def query_datapoints(config):
+    lines = config.splitlines()
+    es_hosts = lines[0]
+    sql = ''.join(lines[1:])
+    datapoints = []
+    ts = int(time.time())
+    result_map = es_query.execute_sql(es_hosts, sql)
+    for metric_name, rows in result_map.iteritems():
+        for row in rows or []:
+            datapoint = {'value': row.pop('value', 0)}
+            if row:
+                tags = {}
+                for k, v in row.iteritems():
+                    tags[to_str(k)] = to_str(v)
+                datapoint['tags'] = tags
+            datapoint['name'] = metric_name
+            datapoint['timestamp'] = ts
+            datapoints.append(datapoint)
+    return datapoints
+
+
 if __name__ == "__main__":
     url = sys.argv[1]
     cache_key = '/tmp/es-monitor-%s' % base64.b64encode(url)
@@ -31,32 +52,4 @@ if __name__ == "__main__":
         content = resp.read()
         with open(cache_key, 'w') as f:
             f.write(content)
-    lines = content.splitlines()
-    es_hosts = lines[0]
-    current_sql = []
-    metrics = []
-    for line in lines[1:]:
-        if not line.strip():
-            continue
-        if line.strip().startswith('>>>'):
-            metric_name = line.replace('>>>', '').strip()
-            sql = '\n'.join(current_sql)
-            current_sql = []
-            metrics.append((metric_name, sql))
-        else:
-            current_sql.append(line)
-    datapoints = []
-    for metric_name, sql in metrics:
-        rows = es_query.execute_sql(es_hosts, sql)
-        ts = int(time.time())
-        for row in rows or []:
-            datapoint = {'value': row.pop('value', 0)}
-            if row:
-                tags = {}
-                for k, v in row.iteritems():
-                    tags[to_str(k)] = to_str(v)
-                datapoint['tags'] = tags
-            datapoint['name'] = metric_name
-            datapoint['timestamp'] = ts
-            datapoints.append(datapoint)
-    print json.dumps(datapoints)
+    print json.dumps(query_datapoints(content))

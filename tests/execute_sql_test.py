@@ -14,6 +14,12 @@ class TestExecuteSQL(unittest.TestCase):
         es_query.create_executor = self.old_create_executor
         super(TestExecuteSQL, self).tearDown()
 
+    def create_executor(self, sql_selects):
+        return self
+
+    def execute(self):
+        return [{'some_key': 'some_value'}]
+
     def test_no_save_as(self):
         result_map = es_query.execute_sql(None, """
             SELECT * FROM abc
@@ -48,10 +54,3 @@ for i in range(100):
     result_map['result1'].append(i)
         """)
         self.assertEqual(['result1'], result_map.keys())
-
-
-    def create_executor(self, sql_selects):
-        return self
-
-    def execute(self):
-        return [{'some_key': 'some_value'}]
