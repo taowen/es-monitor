@@ -39,6 +39,9 @@ def execute_sql(es_hosts, sql):
                 result_map[result_name] = create_executor(current_sql_selects, result_map).execute()
                 current_sql_selects = []
             elif is_remove:
+                if current_sql_selects:
+                    result_map['result'] = create_executor(current_sql_selects, result_map).execute()
+                    current_sql_selects = []
                 result_map.pop(is_remove.group(1))
             else:
                 exec sql_select in {'result_map': result_map}, {}
@@ -116,4 +119,3 @@ if __name__ == "__main__":
     for result_name, rows in result_map.iteritems():
         for row in rows:
             print json.dumps(row)
-    sys.exit(0 if rows else 1)

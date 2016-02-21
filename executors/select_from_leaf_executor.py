@@ -2,6 +2,7 @@ from sqlparse import tokens as ttypes
 from sqlparse import sql as stypes
 from translators import filter_translator
 from translators import sort_translator
+from translators import join_translator
 import functools
 
 
@@ -35,26 +36,10 @@ class SelectFromLeafExecutor(object):
             request['size'] = self.sql_select.limit
         if self.sql_select.where:
             request['query'] = filter_translator.create_compound_filter(self.sql_select.where.tokens[1:])
-        join_table = self.sql_select.join_table
-        if join_table:
-            if join_table in self.sql_select.joinable_results:
-                template_filter = filter_translator.create_compound_filter(
-                    self.sql_select.join_conditions, self.sql_select.tables())
-                template_filter_str = repr(template_filter)
-                join_filters = []
-                rows = self.sql_select.joinable_results[join_table]
-                for row in rows:
-                    this_filter_as_str = template_filter_str
-                    for k, v in row.iteritems():
-                        variable_name = "'${%s.%s}'" % (join_table, k)
-                        this_filter_as_str = this_filter_as_str.replace(variable_name, "'%s'" % v if isinstance(v, basestring) else v)
-                    join_filters.append(eval(this_filter_as_str))
-                request['query'] = {'bool': {'filter': request.get('query', {}), 'should': join_filters}}
-            elif join_table in self.sql_select.joinable_queries:
-                raise Exception('not implemented')
-            else:
-                raise Exception('join table not found: %s' % join_table)
-
+        if self.sql_select.join_table:
+            request['query'] = {
+                'bool': {'filter': request.get('query', {}),
+                         'should': join_translator.translate_join(self.sql_select)}}
         return request
 
     def select_response(self, response):

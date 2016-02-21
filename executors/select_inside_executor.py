@@ -3,6 +3,7 @@ from translators import bucket_script_translator
 from translators import sort_translator
 from translators import metric_translator
 from translators import group_by_translator
+from translators import join_translator
 from sqlparse.ordereddict import OrderedDict
 
 
@@ -201,6 +202,10 @@ class SelectInsideLeafExecutor(SelectInsideExecutor):
         super(SelectInsideLeafExecutor, self).build_request()
         if self.sql_select.where:
             self.request['query'] = filter_translator.create_compound_filter(self.sql_select.where.tokens[1:])
+        if self.sql_select.join_table:
+            self.request['query'] = {
+                'bool': {'filter': self.request.get('query', {}),
+                         'should': join_translator.translate_join(self.sql_select)}}
 
     def select_buckets(self, response):
         # response is returned from elasticsearch
