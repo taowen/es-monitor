@@ -14,7 +14,13 @@ class SqlSelect(object):
         self.limit = None
         self.having = []
         self.where = None
+        self.join_table = None
+        self.join_conditions = []
+
         self.buckets_names = {}
+        self.joinable_results = {}
+        self.joinable_queries = {}
+
         self.is_select_inside = False
         self.on_SELECT(tokens)
         if isinstance(self.source, basestring):
@@ -27,13 +33,13 @@ class SqlSelect(object):
         sql_select = SqlSelect(statement.tokens)
         return sql_select
 
-    @property
-    def inner_most(self):
-        if isinstance(self.source, basestring):
-            return self
-        if self.is_select_inside and not self.source.is_select_inside:
-            return self
-        return self.source.inner_most
+    def tables(self):
+        map = {self.source: True}
+        for t in self.joinable_results.keys():
+            map[t] = False
+        for t in self.joinable_queries.keys():
+            map[t] = False
+        return map
 
     def on_SELECT(self, tokens):
         if not (ttypes.DML == tokens[0].ttype and 'SELECT' == tokens[0].value.upper()):
@@ -63,7 +69,11 @@ class SqlSelect(object):
                 elif 'HAVING' == token.value.upper():
                     idx = self.on_HAVING(tokens, idx)
                     continue
+                elif 'JOIN' == token.value.upper():
+                    idx = self.on_JOIN(tokens, idx)
+                    continue
                 else:
+                    print(tokens)
                     raise Exception('unexpected: %s' % token)
             elif isinstance(token, stypes.Where):
                 self.on_WHERE(token)
@@ -128,9 +138,27 @@ class SqlSelect(object):
             token = tokens[idx]
             if ttypes.Keyword == token.ttype and token.value.upper() in ('ORDER', 'LIMIT'):
                 break
-            else:
-                idx += 1
-                self.having.append(token)
+            idx += 1
+            self.having.append(token)
+        return idx
+
+    def on_JOIN(self, tokens, idx):
+        is_on = False
+        while idx < len(tokens):
+            token = tokens[idx]
+            if ttypes.Keyword == token.ttype and token.value.upper() in ('ORDER', 'LIMIT', 'GROUP', 'WHERE', 'HAVING'):
+                break
+            idx += 1
+            if is_on:
+                self.join_conditions.append(token)
+            if token.is_whitespace():
+                continue
+            if token.is_field():
+                if self.join_table:
+                    raise Exception('can only join one table')
+                self.join_table = token.as_field_name()
+            elif ttypes.Keyword == token.ttype and 'ON' == token.value.upper():
+                is_on = True
         return idx
 
     def on_GROUP(self, tokens, idx):

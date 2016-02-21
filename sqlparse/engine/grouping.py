@@ -125,6 +125,17 @@ def group_as(tlist):
                       check_right=_right_valid,
                       check_left=_left_valid)
 
+def group_table_dot_field(tlist):
+    def _right_valid(token):
+        return token.ttype in (T.Name, T.String.Symbol)
+
+    def _left_valid(token):
+        return token.ttype in (T.Name, T.String.Symbol)
+
+    _group_left_right(tlist, T.Punctuation, '.', sql.Identifier,
+                      check_right=_right_valid,
+                      check_left=_left_valid)
+
 
 def group_assignment(tlist):
     _group_left_right(tlist, T.Assignment, ':=', sql.Assignment,
@@ -386,6 +397,7 @@ def group(tlist):
         group_comments,
         group_brackets,
         group_functions,
+        group_table_dot_field,
         group_where,
         group_case,
         group_datetime,

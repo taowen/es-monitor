@@ -130,13 +130,6 @@ class TestSelectFromLeafProjections(unittest.TestCase):
             'a.exchange': 'nasdaq'}],
             rows)
 
-    def test_select_nested_field_without_quote(self):
-        try:
-            executor = es_query.create_executor('SELECT a.exchange FROM symbol')
-        except:
-            return
-        self.fail('should fail')
-
 
     def test_select_expression(self):
         executor = es_query.create_executor('SELECT "a.price"/2 FROM symbol')

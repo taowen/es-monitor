@@ -14,7 +14,7 @@ class TestExecuteSQL(unittest.TestCase):
         es_query.create_executor = self.old_create_executor
         super(TestExecuteSQL, self).tearDown()
 
-    def create_executor(self, sql_selects):
+    def create_executor(self, sql_selects, joinable_results):
         return self
 
     def execute(self):

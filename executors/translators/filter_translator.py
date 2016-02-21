@@ -10,7 +10,8 @@ NOW = None
 LOGGER = logging.getLogger(__name__)
 
 
-def create_compound_filter(tokens):
+def create_compound_filter(tokens, tables=None):
+    tables = tables or {}
     idx = 0
     current_filter = None
     last_filter = None
@@ -23,7 +24,7 @@ def create_compound_filter(tokens):
             continue
         if isinstance(token, stypes.Comparison) or isinstance(token, stypes.Parenthesis):
             if isinstance(token, stypes.Comparison):
-                new_filter = create_comparision_filter(token)
+                new_filter = create_comparision_filter(token, tables)
             elif isinstance(token, stypes.Parenthesis):
                 new_filter = create_compound_filter(token.tokens[1:-1])
             else:
@@ -89,7 +90,8 @@ def try_merge_filter(new_filter, last_filter):
     return False
 
 
-def create_comparision_filter(comparison):
+def create_comparision_filter(comparison, tables=None):
+    tables = tables or {}
     if not isinstance(comparison, stypes.Comparison):
         raise Exception('unexpected: %s' % comparison)
     operator = comparison.operator
@@ -108,6 +110,9 @@ def create_comparision_filter(comparison):
         else:
             raise Exception('complex range condition not supported: %s' % comparison)
     elif '=' == operator:
+        cross_table_eq = eval_cross_table_eq(tables, comparison.left, comparison.right)
+        if cross_table_eq:
+            return cross_table_eq
         simple_types = (ttypes.Number.Integer, ttypes.Number.Float, ttypes.String.Single)
         right_operand_as_value = eval_value(comparison.right)
         left_operand_as_value = eval_value(comparison.left)
@@ -139,7 +144,19 @@ def create_comparision_filter(comparison):
             raise Exception('unexpected: %s' % repr(comparison.right))
         return {'bool': {'must_not': {'exists': {'field': comparison.left.as_field_name()}}}}
     else:
-        raise Exception('unexpected operator: %s' % operator.value)
+        raise Exception('unexpected operator: %s' % operator)
+
+
+def eval_cross_table_eq(tables, left, right):
+    if type(right) == stypes.Identifier and len(right.tokens) == 3 and '.' == right.tokens[1].value:
+        if type(left) == stypes.Identifier and len(left.tokens) == 3 and '.' == left.tokens[1].value:
+            right_table = right.tokens[0].as_field_name()
+            left_table = left.tokens[0].as_field_name()
+            if True == tables.get(right_table):
+                return {'term': {right.tokens[2].as_field_name(): '${%s}' % str(left)}}
+            elif True == tables.get(left_table):
+                return {'term': {left.tokens[2].as_field_name(): '${%s}' % str(right)}}
+    return None
 
 
 def eval_value(token):

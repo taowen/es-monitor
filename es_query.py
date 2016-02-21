@@ -36,18 +36,18 @@ def execute_sql(es_hosts, sql):
             is_remove = re.match(r'^REMOVE\s+RESULT\s+(.*)$', sql_select, re.IGNORECASE | re.DOTALL)
             if is_save:
                 result_name = is_save.group(1)
-                result_map[result_name] = create_executor(current_sql_selects).execute()
+                result_map[result_name] = create_executor(current_sql_selects, result_map).execute()
                 current_sql_selects = []
             elif is_remove:
                 result_map.pop(is_remove.group(1))
             else:
                 exec sql_select in {'result_map': result_map}, {}
     if current_sql_selects:
-        result_map['result'] = create_executor(current_sql_selects).execute()
+        result_map['result'] = create_executor(current_sql_selects, result_map).execute()
     return result_map
 
 
-def create_executor(sql_selects):
+def create_executor(sql_selects, joinable_results=None):
     executor_map = {}
     if not isinstance(sql_selects, list):
         sql_selects = [sql_selects]
@@ -55,17 +55,18 @@ def create_executor(sql_selects):
     level = 0
     for sql_select in sql_selects:
         level += 1
-        sql_select = sql_select.strip()
-        if not sql_select:
-            continue
-        match = re.match(r'^WITH\s+(.*)\s+AS\s+(.*)\s*$', sql_select, re.IGNORECASE | re.DOTALL)
-        executor_name = None
-        if match:
-            sql_select = match.group(1)
-            executor_name = match.group(2)
-        else:
-            executor_name = 'level%s' % level
-        sql_select = SqlSelect.parse(sql_select)
+        executor_name = 'level%s' % level
+        if not isinstance(sql_select, SqlSelect):
+            sql_select = sql_select.strip()
+            if not sql_select:
+                continue
+            match = re.match(r'^WITH\s+(.*)\s+AS\s+(.*)\s*$', sql_select, re.IGNORECASE | re.DOTALL)
+            if match:
+                sql_select = match.group(1)
+                executor_name = match.group(2)
+            sql_select = SqlSelect.parse(sql_select)
+        if joinable_results:
+            sql_select.joinable_results = joinable_results
         if not isinstance(sql_select.source, basestring):
             raise Exception('nested SELECT is not supported')
         if sql_select.source in executor_map:

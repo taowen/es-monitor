@@ -226,3 +226,9 @@ class TestSqlSelectLimit(unittest.TestCase):
     def test_limit(self):
         sql_select = SqlSelect.parse('SELECT * FROM symbol LIMIT 1')
         self.assertEqual(1, sql_select.limit)
+
+class TestSqlSelectJoin(unittest.TestCase):
+    def test_join_one_field(self):
+        sql_select = SqlSelect.parse('SELECT * FROM quote JOIN matched_symbols ON quote.symbol = matched_symbols.symbol')
+        self.assertEqual('matched_symbols', sql_select.join_table)
+        self.assertTrue(len(sql_select.join_conditions) > 0)

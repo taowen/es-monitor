@@ -23,9 +23,7 @@ class SelectFromLeafExecutor(object):
                 self.selectors.append(functools.partial(
                     select_by_python_code, projection_name=projection_name, python_code=python_code))
 
-    def execute(self, inside_aggs=None, parent_pipeline_aggs=None, sibling_pipeline_aggs=None):
-        if inside_aggs or parent_pipeline_aggs or sibling_pipeline_aggs:
-            raise Exception('leaf select from can not nest other aggregation')
+    def execute(self):
         response = self.search_es(self.sql_select.source, self.request)
         return self.select_response(response)
 
@@ -37,6 +35,26 @@ class SelectFromLeafExecutor(object):
             request['size'] = self.sql_select.limit
         if self.sql_select.where:
             request['query'] = filter_translator.create_compound_filter(self.sql_select.where.tokens[1:])
+        join_table = self.sql_select.join_table
+        if join_table:
+            if join_table in self.sql_select.joinable_results:
+                template_filter = filter_translator.create_compound_filter(
+                    self.sql_select.join_conditions, self.sql_select.tables())
+                template_filter_str = repr(template_filter)
+                join_filters = []
+                rows = self.sql_select.joinable_results[join_table]
+                for row in rows:
+                    this_filter_as_str = template_filter_str
+                    for k, v in row.iteritems():
+                        variable_name = "'${%s.%s}'" % (join_table, k)
+                        this_filter_as_str = this_filter_as_str.replace(variable_name, "'%s'" % v if isinstance(v, basestring) else v)
+                    join_filters.append(eval(this_filter_as_str))
+                request['query'] = {'bool': {'filter': request.get('query', {}), 'should': join_filters}}
+            elif join_table in self.sql_select.joinable_queries:
+                raise Exception('not implemented')
+            else:
+                raise Exception('join table not found: %s' % join_table)
+
         return request
 
     def select_response(self, response):
