@@ -9,6 +9,7 @@ from sqlparse import sql as stypes
 NOW = None
 LOGGER = logging.getLogger(__name__)
 
+
 def create_compound_filter(tokens):
     idx = 0
     current_filter = None
@@ -199,33 +200,3 @@ def eval_interval(interval):
         else:
             raise Exception('unknown unit: %s' % unit)
     return timedelta
-
-
-def eval_numeric_value(val):
-    if val.startswith('('):
-        val = val[1:-1]
-    if val.startswith('@now'):
-        val = val[4:].strip()
-        if not val:
-            return long(time.time() * long(1000))
-        if '+' == val[0]:
-            return long(time.time() * long(1000)) + eval_timedelta(val[1:])
-        elif '-' == val[0]:
-            return long(time.time() * long(1000)) - eval_timedelta(val[1:])
-        else:
-            raise Exception('unexpected: %s' % token)
-    else:
-        return float(val)
-
-
-def eval_timedelta(str):
-    if str.endswith('m'):
-        return long(str[:-1]) * long(60 * 1000)
-    elif str.endswith('s'):
-        return long(str[:-1]) * long(1000)
-    elif str.endswith('h'):
-        return long(str[:-1]) * long(60 * 60 * 1000)
-    elif str.endswith('d'):
-        return long(str[:-1]) * long(24 * 60 * 60 * 1000)
-    else:
-        return long(str)

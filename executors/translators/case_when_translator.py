@@ -61,9 +61,9 @@ class CaseWhenNumericRangeTranslator(object):
         if isinstance(token, stypes.Comparison):
             operator = str(token.token_next_by_type(0, ttypes.Comparison))
             if '>=' == operator:
-                current_range['from'] = filter_translator.eval_numeric_value(str(token.right))
+                current_range['from'] = filter_translator.eval_value(token.right)
             elif '<' == operator:
-                current_range['to'] = filter_translator.eval_numeric_value(str(token.right))
+                current_range['to'] = filter_translator.eval_value(token.right)
             else:
                 raise Exception('unexpected: %s' % token)
             self.set_field(token.left.as_field_name())
