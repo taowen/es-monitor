@@ -16,30 +16,33 @@ class SelectInsideExecutor(object):
         self.sql_select = sql_select
         self.request = {}
         self.children = []
-        self.metric_request, self.metric_selector = metric_translator.translate_metrics(sql_select)
 
     def add_child(self, executor):
         self.children.append(executor)
 
     def build_request(self):
+        buckets_names = self.list_buckets_names()
+        for buckets_name, buckets_path in buckets_names.iteritems():
+            buckets_names[buckets_name] = self.format_buckets_path(buckets_path)
+        self.sql_select.buckets_names = buckets_names
+        self.metric_request, self.metric_selector = metric_translator.translate_metrics(self.sql_select)
         self.request['size'] = 0  # do not need hits in response
-        reversed_group_by_names = list(reversed(self.sql_select.group_by.keys())) if self.sql_select.group_by else []
-        self.add_aggs_to_request(reversed_group_by_names)
-        if self.sql_select.order_by or self.sql_select.limit:
-            if len(self.sql_select.group_by or {}) != 1:
-                raise Exception('order by can only be applied on single group by')
-            group_by_name = reversed_group_by_names[0]
-            aggs = self.request['aggs'][group_by_name]
-            agg_names = set(aggs.keys()) - set(['aggs'])
-            if len(agg_names) != 1:
-                raise Exception('order by can only be applied on single group by')
-            agg_type = list(agg_names)[0]
-            agg = aggs[agg_type]
-            if self.sql_select.order_by:
-                agg['order'] = sort_translator.translate_sort(self.sql_select, (agg_type, group_by_name))
-            if self.sql_select.limit:
-                agg['size'] = self.sql_select.limit
+        self.add_aggs_to_request()
         self.add_children_aggs()
+
+    def list_buckets_names(self):
+        buckets_names = {}
+        for projection_name in self.sql_select.projections.keys():
+            buckets_names[projection_name] = [projection_name]
+        for child_executor in self.children:
+            child_prefix = child_executor.sql_select.group_by.keys()
+            child_buckets_names = child_executor.list_buckets_names()
+            for buckets_name, buckets_path in child_buckets_names.iteritems():
+                buckets_names[buckets_name] = child_prefix + buckets_path
+        return buckets_names
+
+    def format_buckets_path(self, buckets_path):
+        return '.'.join(['>'.join(buckets_path[:-1]), buckets_path[-1]])
 
     def add_children_aggs(self):
         if not self.children:
@@ -88,7 +91,7 @@ class SelectInsideExecutor(object):
     def select_buckets(self, response):
         raise Exception('base class')
 
-    def add_aggs_to_request(self, group_by_names):
+    def add_aggs_to_request(self):
         self.request['aggs'], tail_aggs = group_by_translator.translate_group_by(self.sql_select.group_by)
         if self.metric_request:
             tail_aggs.update(self.metric_request)
@@ -96,6 +99,20 @@ class SelectInsideExecutor(object):
             tail_aggs['having'] = {
                 'bucket_selector': bucket_script_translator.translate_script(self.sql_select, self.sql_select.having)
             }
+        if self.sql_select.order_by or self.sql_select.limit:
+            if len(self.sql_select.group_by or {}) != 1:
+                raise Exception('order by can only be applied on single group by')
+            group_by_name = self.sql_select.group_by.keys()[0]
+            aggs = self.request['aggs'][group_by_name]
+            agg_names = set(aggs.keys()) - set(['aggs'])
+            if len(agg_names) != 1:
+                raise Exception('order by can only be applied on single group by')
+            agg_type = list(agg_names)[0]
+            agg = aggs[agg_type]
+            if self.sql_select.order_by:
+                agg['order'] = sort_translator.translate_sort(self.sql_select, (agg_type, group_by_name))
+            if self.sql_select.limit:
+                agg['size'] = self.sql_select.limit
 
     def collect_records(self, rows, parent_bucket, group_by_names, props):
         if group_by_names:

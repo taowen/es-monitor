@@ -10,7 +10,7 @@ def translate_metrics(sql_select):
             continue
         if not isinstance(projection, stypes.Function):
             raise Exception('can only select group by fields or function in aggregation mode')
-        request, selector = translate_metric(projection, projection_name)
+        request, selector = translate_metric(sql_select.buckets_names, projection, projection_name)
         if request:
             metric_request[projection_name] = request
         if selector:
@@ -18,7 +18,7 @@ def translate_metrics(sql_select):
     return metric_request, metric_selector
 
 
-def translate_metric(sql_function, projection_name):
+def translate_metric(buckets_names, sql_function, projection_name):
     if not isinstance(sql_function, stypes.Function):
         raise Exception('unexpected: %s' % repr(sql_function))
     sql_function_name = sql_function.tokens[0].value.upper()
@@ -43,7 +43,12 @@ def translate_metric(sql_function, projection_name):
         if len(sql_function.get_parameters()) != 1:
             raise Exception('unexpected: %s' % repr(sql_function))
         selector = lambda bucket: bucket[projection_name]['value']
-        request = {sql_function_name.lower(): {'field': sql_function.get_parameters()[0].value}}
+        field_name = sql_function.get_parameters()[0].as_field_name()
+        buckets_path = buckets_names.get(field_name)
+        if buckets_path:
+            request = {'%s_bucket' % sql_function_name.lower(): {'buckets_path': buckets_path}}
+        else:
+            request = {sql_function_name.lower(): {'field': field_name}}
         return request, selector
     else:
         raise Exception('unsupported function: %s' % repr(sql_function))

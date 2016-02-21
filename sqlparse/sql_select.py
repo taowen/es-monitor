@@ -14,6 +14,7 @@ class SqlSelect(object):
         self.limit = None
         self.having = []
         self.where = None
+        self.buckets_names = {}
         self.is_select_inside = False
         self.on_SELECT(tokens)
         if isinstance(self.source, basestring):
