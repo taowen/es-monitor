@@ -110,8 +110,9 @@ def search_es(index, request):
 if __name__ == "__main__":
     DEBUG = True
     sql = sys.stdin.read()
-    rows = execute_sql(sys.argv[1], sql)
+    result_map = execute_sql(sys.argv[1], sql)
     print('=====')
-    for row in rows:
-        print json.dumps(row)
+    for result_name, rows in result_map.iteritems():
+        for row in rows:
+            print json.dumps(row)
     sys.exit(0 if rows else 1)
