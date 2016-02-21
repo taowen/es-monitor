@@ -153,11 +153,27 @@ def eval_cross_table_eq(tables, left, right):
             right_table = right.tokens[0].as_field_name()
             left_table = left.tokens[0].as_field_name()
             if True == tables.get(right_table):
-                return {'term': {right.tokens[2].as_field_name(): '${%s}' % str(left)}}
+                field_ref = FieldRef(left.tokens[0].as_field_name(), left.tokens[2].as_field_name())
+                return {'term': {right.tokens[2].as_field_name(): field_ref}}
             elif True == tables.get(left_table):
-                return {'term': {left.tokens[2].as_field_name(): '${%s}' % str(right)}}
+                field_ref = FieldRef(right.tokens[0].as_field_name(), right.tokens[2].as_field_name())
+                return {'term': {left.tokens[2].as_field_name(): field_ref}}
     return None
 
+
+class FieldRef(object):
+    def __init__(self, table, field):
+        self.table = table
+        self.field = field
+
+    def __repr__(self):
+        return '${%s.%s}' % (self.table, self.field)
+
+    def __str__(self):
+        return repr(self)
+
+    def __unicode__(self):
+        return repr(self)
 
 def eval_value(token):
     val = str(token)

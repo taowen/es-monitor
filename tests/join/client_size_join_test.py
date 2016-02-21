@@ -13,7 +13,7 @@ class TestClientSideJoin(unittest.TestCase):
         ]
         executor = es_query.create_executor(sql_select)
         self.assertEqual(
-            {'query': {'bool': {'filter': {}, 'should': [{'term': {u'symbol': '1'}}, {'term': {u'symbol': '2'}}]}}},
+            {'query': {'bool': {'filter': {}, 'should': [{'terms': {u'symbol': ['1', '2']}}]}}},
             executor.request)
 
     def test_join_on_two_fields(self):
