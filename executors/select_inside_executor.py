@@ -6,6 +6,7 @@ from translators import bucket_script_translator
 from translators import doc_script_translator
 from translators import sort_translator
 from translators import metric_translator
+from translators import group_by_translator
 from merge_aggs import merge_aggs
 from sqlparse.ordereddict import OrderedDict
 
@@ -88,111 +89,13 @@ class SelectInsideExecutor(object):
         raise Exception('base class')
 
     def add_aggs_to_request(self, group_by_names):
-        current_aggs = {'aggs': {}}
+        self.request['aggs'], tail_aggs = group_by_translator.translate_group_by(self.sql_select.group_by)
         if self.metric_request:
-            current_aggs = {'aggs': self.metric_request}
+            tail_aggs.update(self.metric_request)
         if self.sql_select.having:
-            current_aggs['aggs']['having'] = {
+            tail_aggs['having'] = {
                 'bucket_selector': bucket_script_translator.translate_script(self.sql_select, self.sql_select.having)
             }
-        if group_by_names:
-            for group_by_name in group_by_names:
-                group_by = self.sql_select.group_by.get(group_by_name)
-                if isinstance(group_by, stypes.Parenthesis):
-                    if len(group_by.tokens > 3):
-                        raise Exception('unexpected: %s' % group_by)
-                    group_by = group_by.tokens[1]
-                if group_by.ttype in (ttypes.Name, ttypes.String.Symbol):
-                    current_aggs = self.append_terms_aggs(current_aggs, group_by_name)
-                elif isinstance(group_by, stypes.Case):
-                    current_aggs = self.append_range_aggs(current_aggs, group_by, group_by_name)
-                elif isinstance(group_by, stypes.Function):
-                    sql_function_name = group_by.tokens[0].value.upper()
-                    if sql_function_name in ('DATE_TRUNC', 'TO_CHAR'):
-                        current_aggs = self.append_date_histogram_aggs(current_aggs, group_by, group_by_name)
-                    elif 'HISTOGRAM' == sql_function_name:
-                        current_aggs = self.append_histogram_aggs(current_aggs, group_by, group_by_name)
-                    else:
-                        current_aggs = self.append_terms_aggs_with_script(current_aggs, group_by, group_by_name)
-                elif isinstance(group_by, stypes.Expression):
-                    current_aggs = self.append_terms_aggs_with_script(current_aggs, group_by, group_by_name)
-                elif isinstance(group_by, stypes.Where):
-                    current_aggs = self.append_filter_aggs(current_aggs, group_by, group_by_name)
-                else:
-                    raise Exception('unexpected: %s' % repr(group_by))
-        self.request.update(current_aggs)
-
-    def append_terms_aggs(self, current_aggs, group_by_name):
-        current_aggs = {
-            'aggs': {group_by_name: dict(current_aggs, **{
-                'terms': {'field': group_by_name, 'size': 0}
-            })}
-        }
-        return current_aggs
-
-    def append_terms_aggs_with_script(self, current_aggs, group_by, group_by_name):
-        script = doc_script_translator.translate_script([group_by])
-        script['size'] = 0
-        current_aggs = {
-            'aggs': {group_by_name: dict(current_aggs, **{
-                'terms': script
-            })}
-        }
-        return current_aggs
-
-    def append_date_histogram_aggs(self, current_aggs, group_by, group_by_name):
-        date_format = None
-        if 'TO_CHAR' == group_by.tokens[0].value.upper():
-            to_char_params = list(group_by.get_parameters())
-            sql_function = to_char_params[0]
-            date_format = eval(to_char_params[1].value)
-        else:
-            sql_function = group_by
-        if 'DATE_TRUNC' == sql_function.tokens[0].value.upper():
-            parameters = tuple(sql_function.get_parameters())
-            interval, field = parameters
-            current_aggs = {
-                'aggs': {group_by_name: dict(current_aggs, **{
-                    'date_histogram': {
-                        'field': field.as_field_name(),
-                        'time_zone': '+08:00',
-                        'interval': eval(interval.value)
-                    }
-                })}
-            }
-            if date_format:
-                current_aggs['aggs'][group_by_name]['date_histogram']['format'] = date_format
-        else:
-            raise Exception('unexpected: %s' % repr(sql_function))
-        return current_aggs
-
-    def append_histogram_aggs(self, current_aggs, group_by, group_by_name):
-        parameters = tuple(group_by.get_parameters())
-        historgram = {'field': parameters[0].as_field_name(), 'interval': eval(parameters[1].value)}
-        if len(parameters) == 3:
-            historgram.update(eval(eval(parameters[2].value)))
-        current_aggs = {
-            'aggs': {group_by_name: dict(current_aggs, **{
-                'histogram': historgram
-            })}
-        }
-        return current_aggs
-
-    def append_filter_aggs(self, current_aggs, where, group_by_name):
-        filter = filter_translator.create_compound_filter(where.tokens[1:])
-        current_aggs = {
-            'aggs': {group_by_name: dict(current_aggs, **{
-                'filter': filter
-            })}
-        }
-        return current_aggs
-
-    def append_range_aggs(self, current_aggs, case_when, group_by_name):
-        case_when_aggs = case_when_translator.translate_case_when(case_when)
-        current_aggs = {
-            'aggs': {group_by_name: dict(current_aggs, **case_when_aggs)}
-        }
-        return current_aggs
 
     def collect_records(self, rows, parent_bucket, group_by_names, props):
         if group_by_names:
@@ -237,7 +140,6 @@ class SelectInsideBranchExecutor(SelectInsideExecutor):
 
     def is_filter_only(self):
         return self._is_filter_only and all(child_executor.is_filter_only() for child_executor in self.children)
-
 
     def select_buckets(self, response):
         # response is selected from inner executor
