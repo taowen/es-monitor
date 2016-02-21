@@ -22,7 +22,29 @@ def execute_sql(es_hosts, sql):
     global ES_HOSTS
 
     ES_HOSTS = es_hosts
-    return create_executor(sql.split(';')).execute()
+    current_sql_selects = []
+    result_map = {}
+    for sql_select in sql.split(';'):
+        sql_select = sql_select.strip()
+        if not sql_select:
+            continue
+        is_sql = re.match(r'^(WITH|SELECT)\s+', sql_select, re.IGNORECASE)
+        if is_sql:
+            current_sql_selects.append(sql_select)
+        else:
+            is_save = re.match(r'^SAVE\s+RESULT\s+AS\s+(.*)$', sql_select, re.IGNORECASE | re.DOTALL)
+            is_remove = re.match(r'^REMOVE\s+RESULT\s+(.*)$', sql_select, re.IGNORECASE | re.DOTALL)
+            if is_save:
+                result_name = is_save.group(1)
+                result_map[result_name] = create_executor(current_sql_selects).execute()
+                current_sql_selects = []
+            elif is_remove:
+                result_map.pop(is_remove.group(1))
+            else:
+                exec sql_select in {'result_map': result_map}, {}
+    if current_sql_selects:
+        result_map['result'] = create_executor(current_sql_selects).execute()
+    return result_map
 
 
 def create_executor(sql_selects):
