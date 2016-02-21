@@ -40,7 +40,7 @@ def create_executor(sql_selects):
         sql_select = sql_select.strip()
         if not sql_select:
             continue
-        match = re.match(r'^WITH\s+(.*)\s+AS\s+(.*)', sql_select, re.IGNORECASE)
+        match = re.match(r'^WITH\s+(.*)\s+AS\s+(.*)\s*$', sql_select, re.IGNORECASE | re.DOTALL)
         executor_name = None
         if match:
             sql_select = match.group(1)

@@ -3,60 +3,35 @@ from sqlparse import sql as stypes
 from sqlparse import tokens as ttypes
 
 
-def translate_script(sql_select, tokens, include_sub_aggregation=False):
-    variables = {}
-    if include_sub_aggregation:
-        inner_most = sql_select.inner_most
-        current_sql_select = sql_select.source
-        while current_sql_select != inner_most:
-            bucket_path = '>'.join(current_sql_select.group_by.keys())
-            for variable_name in variables.keys():
-                variables[variable_name] = '%s>%s' % (bucket_path, variables[variable_name])
-            for variable_name, projection in current_sql_select.projections.iteritems():
-                if is_count_star(projection):
-                    variables[variable_name] = '%s._count' % bucket_path
-                else:
-                    variables[variable_name] = '%s.%s' % (bucket_path, variable_name)
-            current_sql_select = current_sql_select.source
-        include_sql_selects = [inner_most, sql_select]
-    else:
-        include_sql_selects = [sql_select]
-    for include_sql_select in include_sql_selects:
-        for variable_name, projection in include_sql_select.projections.iteritems():
-            if is_count_star(projection):
-                variables[variable_name] = '_count'
-            elif variable_name in include_sql_select.group_by:
-                variables[variable_name] = '_key'
-            else:
-                variables[variable_name] = variable_name
+def translate_script(sql_select, tokens):
     agg = {'buckets_path': {}, 'script': {'lang': 'expression', 'inline': ''}}
-    _translate(variables, agg, tokens)
+    _translate(sql_select.buckets_names, agg, tokens)
     return agg
 
 
-def _translate(variables, agg, tokens):
+def _translate(buckets_names, agg, tokens):
     for token in tokens:
-        if '@now' in token.value:
-            agg['script']['inline'] = '%s%s' % (
-                agg['script']['inline'], filter_translator.eval_numeric_value(token.value))
-        elif token.ttype == ttypes.Keyword and 'AND' == token.value.upper():
+        if token.ttype == ttypes.Keyword and 'AND' == token.value.upper():
             agg['script']['inline'] = '%s%s' % (
                 agg['script']['inline'], '&&')
         elif token.ttype == ttypes.Keyword and 'OR' == token.value.upper():
             agg['script']['inline'] = '%s%s' % (
                 agg['script']['inline'], '||')
         elif token.is_group():
-            _translate(variables, agg, token.tokens)
+            _translate(buckets_names, agg, token.tokens)
         else:
-            if ttypes.Name == token.ttype:
-                variable_name = token.value
-                bucket_path = variables.get(variable_name)
+            if token.is_field():
+                buckets_name = token.as_field_name()
+                bucket_path = buckets_names.get(buckets_name)
                 if not bucket_path:
                     raise Exception(
                             'having clause referenced variable must exist in select clause: %s' % variable_name)
-                agg['buckets_path'][variable_name] = bucket_path
-            agg['script']['inline'] = '%s%s' % (
-                agg['script']['inline'], token.value)
+                agg['buckets_path'][buckets_name] = bucket_path
+                agg['script']['inline'] = '%s%s' % (
+                    agg['script']['inline'], buckets_name)
+            else:
+                agg['script']['inline'] = '%s%s' % (
+                    agg['script']['inline'], token.value)
 
 
 def is_count_star(projection):

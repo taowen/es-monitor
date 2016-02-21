@@ -7,14 +7,18 @@ class SelectInsideLeafHavingTest(unittest.TestCase):
         executor = es_query.create_executor(
             "SELECT ipo_year, COUNT(*) AS ipo_count FROM symbol GROUP BY ipo_year HAVING ipo_count > 100")
         self.assertEqual(
-            {'aggs': {'ipo_year': {'terms': {'field': 'ipo_year', 'size': 0}, 'aggs': {'having': {
-                'bucket_selector': {'buckets_path': {'ipo_count': '_count'},
-                                    'script': {'lang': 'expression', 'inline': ' ipo_count > 100'}}}}}}, 'size': 0},
+            {'aggs': {u'ipo_year': {'terms': {'field': u'ipo_year', 'size': 0}, 'aggs': {'having': {
+                'bucket_selector': {'buckets_path': {u'ipo_count': '_count'},
+                                    'script': {'lang': 'expression', 'inline': u' ipo_count > 100'}}}}}}, 'size': 0},
             executor.request)
 
     def test_having_by_key(self):
         executor = es_query.create_executor(
             "SELECT ipo_year, COUNT(*) AS ipo_count FROM symbol GROUP BY ipo_year HAVING ipo_year > 100")
+        {'aggs': {u'ipo_year': {'terms': {'field': u'ipo_year', 'size': 0}, 'aggs': {'having': {
+        'bucket_selector': {'buckets_path': {u'ipo_year': '_key'},
+                            'script': {'lang': 'expression', 'inline': u' _key > 100'}}}}}}, 'size': 0}
+
         self.assertEqual(
             {'aggs': {'ipo_year': {'terms': {'field': 'ipo_year', 'size': 0}, 'aggs': {'having': {
                 'bucket_selector': {'buckets_path': {'ipo_year': '_key'},

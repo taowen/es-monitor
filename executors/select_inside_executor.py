@@ -32,8 +32,13 @@ class SelectInsideExecutor(object):
 
     def list_buckets_names(self):
         buckets_names = {}
-        for projection_name in self.sql_select.projections.keys():
-            buckets_names[projection_name] = [projection_name]
+        for projection_name, projection in self.sql_select.projections.iteritems():
+            if bucket_script_translator.is_count_star(projection):
+                buckets_names[projection_name] = ['_count']
+            elif projection_name in self.sql_select.group_by:
+                buckets_names[projection_name] = ['_key']
+            else:
+                buckets_names[projection_name] = [projection_name]
         for child_executor in self.children:
             child_prefix = child_executor.sql_select.group_by.keys()
             child_buckets_names = child_executor.list_buckets_names()
@@ -114,7 +119,7 @@ class SelectInsideExecutor(object):
             agg_type = list(agg_names)[0]
             agg = aggs[agg_type]
             if self.sql_select.order_by:
-                agg['order'] = sort_translator.translate_sort(self.sql_select, (agg_type, group_by_name))
+                agg['order'] = sort_translator.translate_sort(self.sql_select)
             if self.sql_select.limit:
                 agg['size'] = self.sql_select.limit
 

@@ -97,8 +97,8 @@ class SqlSelect(object):
             idx += 1
             if token.is_whitespace():
                 continue
-            if ttypes.Name == token.ttype:
-                self.source = token.value
+            if token.is_field():
+                self.source = token.as_field_name()
                 break
             elif isinstance(token, stypes.Identifier):
                 if len(token.tokens) > 1:
