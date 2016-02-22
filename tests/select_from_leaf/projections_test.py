@@ -130,6 +130,39 @@ class TestSelectFromLeafProjections(unittest.TestCase):
             'a.exchange': 'nasdaq'}],
             rows)
 
+    def test_select_nested_field_via_dot(self):
+        executor = es_query.create_executor('SELECT a.exchange FROM symbol')
+        self.assertEqual({}, executor.request)
+        rows = executor.select_response({
+            "hits": {
+                "hits": [
+                    {
+                        "_score": 1.0,
+                        "_type": "symbol",
+                        "_id": "AVLgXwu88_EnCX8dV9PN",
+                        "_source": {
+                            "a": {
+                                "exchange": "nasdaq"
+                            }
+                        },
+                        "_index": "symbol"
+                    }
+                ],
+                "total": 6714,
+                "max_score": 1.0
+            },
+            "_shards": {
+                "successful": 3,
+                "failed": 0,
+                "total": 3
+            },
+            "took": 32,
+            "timed_out": False
+        })
+        self.assertEqual([{
+            'a.exchange': 'nasdaq'}],
+            rows)
+
 
     def test_select_expression(self):
         executor = es_query.create_executor('SELECT "a.price"/2 FROM symbol')

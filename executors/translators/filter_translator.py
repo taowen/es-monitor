@@ -82,7 +82,7 @@ def try_merge_filter(new_filter, last_filter):
     if ['range'] == new_filter.keys() and ['range'] == last_filter.keys():
         for k in new_filter['range']:
             for o in new_filter['range'][k]:
-                if last_filter['range'].get(k, {}).get(o):
+                if not last_filter['range'].get(k, {}).get(o):
                     return False
             for o in new_filter['range'][k]:
                 last_filter['range'][k][o] = new_filter['range'][k][o]

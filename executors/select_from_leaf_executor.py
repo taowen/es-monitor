@@ -79,6 +79,8 @@ def select_by_python_code(input, row, projection_name, python_code):
 
 
 def translate_projection_to_python(projection):
+    if isinstance(projection, stypes.DotName):
+        return translate_symbol(str(projection))
     if isinstance(projection, stypes.TokenList):
         tokens = list(projection.flatten())
     else:
@@ -86,12 +88,12 @@ def translate_projection_to_python(projection):
     translated = []
     for token in tokens:
         if token.ttype == ttypes.String.Symbol:
-            translated.append(translate_symbol(token))
+            translated.append(translate_symbol(token.value[1:-1]))
         else:
             translated.append(str(token))
     return ''.join(translated)
 
 
-def translate_symbol(symbol):
-    path = symbol.value[1:-1].split('.')
+def translate_symbol(value):
+    path = value.split('.')
     return ''.join([path[0], "['", "']['".join(path[1:]), "']"])

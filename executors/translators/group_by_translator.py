@@ -13,7 +13,7 @@ def translate_group_by(group_by_map):
             if len(group_by.tokens > 3):
                 raise Exception('unexpected: %s' % group_by)
             group_by = group_by.tokens[1]
-        if group_by.ttype in (ttypes.Name, ttypes.String.Symbol):
+        if group_by.is_field():
             tail_aggs = append_terms_aggs(tail_aggs, group_by_name)
         elif isinstance(group_by, stypes.Case):
             tail_aggs = append_range_aggs(tail_aggs, group_by, group_by_name)
