@@ -88,6 +88,8 @@ def create_executor(sql_selects, joinable_results=None):
                     raise Exception('multiple root executor is not supported')
             root_executor = (executor_name, executor)
         executor_map[executor_name] = executor
+    if not root_executor:
+        raise Exception('sql not found in %s' % sql_selects)
     root_executor[1].build_request()
     return root_executor[1]
 

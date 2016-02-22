@@ -23,7 +23,11 @@ SELECT count(*) AS value FROM gs_api_track
 SAVE RESULT AS gs_api_track.count;
 ```
 
-# 命令行 SQL 查询 Elasticsearch
+# SQL 查询 Elasticsearch
+
+教程请阅读：https://segmentfault.com/a/1190000003502849
+
+## 命令行
 
 在命令行上测试的时候也可以用stdin传sql参数，比如
 
@@ -34,7 +38,30 @@ cat << EOF | python es_query.py http://es_hosts
 EOF
 ```
 
-教程请阅读：https://segmentfault.com/a/1190000003502849
+## HTTP
+
+启动http服务器（gunicorn）
+```
+python -m explorer
+```
+翻译 SQL 为 Elasticsearch 查询
+```
+$ cat << EOF | curl -X POST -d @- http://127.0.0.1:8000/translate
+SELECT * FROM quote WHERE symbol='AAPL'
+EOF
+
+{
+  "data": {
+    "indices": "quote*",
+    "query": {
+      "term": {
+        "symbol": "AAPL"
+      }
+    }
+  },
+  "error": null
+}
+```
 
 # Syntax
 
