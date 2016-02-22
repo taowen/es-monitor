@@ -45,7 +45,7 @@ class SqlSelect(object):
         if not (ttypes.DML == tokens[0].ttype and 'SELECT' == tokens[0].value.upper()):
             raise Exception('it is not SELECT: %s' % tokens[0])
         idx = 1
-        source_found = False
+        from_table_found = False
         while idx < len(tokens):
             token = tokens[idx]
             idx += 1
@@ -54,7 +54,7 @@ class SqlSelect(object):
             if ttypes.Keyword == token.ttype:
                 if token.value.upper() in ('FROM', 'INSIDE'):
                     self.is_select_inside = 'INSIDE' == token.value.upper()
-                    source_found = True
+                    from_table_found = True
                     idx = self.on_FROM(tokens, idx)
                     continue
                 elif 'GROUP' == token.value.upper():
@@ -77,7 +77,7 @@ class SqlSelect(object):
                     raise Exception('unexpected: %s' % token)
             elif isinstance(token, stypes.Where):
                 self.on_WHERE(token)
-            elif not source_found:
+            elif not from_table_found:
                 self.set_projections(token)
                 continue
             else:
@@ -187,8 +187,8 @@ class SqlSelect(object):
             for id in ids:
                 if ttypes.Keyword == id.ttype:
                     raise Exception('%s is keyword' % id.value)
-                elif ttypes.Name == id.ttype:
-                    self.group_by[id.value] = id
+                elif id.is_field():
+                    self.group_by[id.as_field_name()] = id
                 elif isinstance(id, stypes.Expression):
                     self.group_by[id.value] = id
                 elif isinstance(id, stypes.Identifier):

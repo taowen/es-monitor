@@ -64,7 +64,7 @@ def append_date_histogram_aggs(tail_aggs, group_by, group_by_name):
     else:
         sql_function = group_by
     if 'DATE_TRUNC' == sql_function.tokens[0].value.upper():
-        parameters = sql_function.get_parameters()
+        parameters = list(sql_function.get_parameters())
         if len(parameters) != 2:
             raise Exception('incorrect parameters count: %s' % list(parameters))
         interval, field = parameters

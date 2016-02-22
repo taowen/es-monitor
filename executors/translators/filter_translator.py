@@ -99,11 +99,11 @@ def create_comparision_filter(comparison, tables=None):
         right_operand_as_value = eval_value(comparison.right)
         left_operand_as_value = eval_value(comparison.left)
         simple_types = (ttypes.Number.Integer, ttypes.Number.Float)
-        if comparison.left.ttype in (ttypes.Name, ttypes.String.Symbol) and right_operand_as_value is not None:
+        if comparison.left.is_field() and right_operand_as_value is not None:
             operator_as_str = {'>': 'gt', '>=': 'gte', '<': 'lt', '<=': 'lte'}[operator]
             return {
                 'range': {comparison.left.as_field_name(): {operator_as_str: right_operand_as_value}}}
-        elif comparison.right.ttype in (ttypes.Name, ttypes.String.Symbol) and left_operand_as_value is not None:
+        elif comparison.right.is_field() and left_operand_as_value is not None:
             operator_as_str = {'>': 'lte', '>=': 'lt', '<': 'gte', '<=': 'gt'}[operator]
             return {
                 'range': {comparison.right.as_field_name(): {operator_as_str: left_operand_as_value}}}
@@ -116,10 +116,10 @@ def create_comparision_filter(comparison, tables=None):
         simple_types = (ttypes.Number.Integer, ttypes.Number.Float, ttypes.String.Single)
         right_operand_as_value = eval_value(comparison.right)
         left_operand_as_value = eval_value(comparison.left)
-        if comparison.left.ttype in (ttypes.Name, ttypes.String.Symbol) and right_operand_as_value is not None:
+        if comparison.left.is_field() and right_operand_as_value is not None:
             field = comparison.left.as_field_name()
             return {'term': {field: right_operand_as_value}}
-        elif comparison.right.ttype in (ttypes.Name, ttypes.String.Symbol) and left_operand_as_value is not None:
+        elif comparison.right.is_field() and left_operand_as_value is not None:
             field = comparison.right.as_field_name()
             return {'term': {field: left_operand_as_value}}
         else:
@@ -148,8 +148,8 @@ def create_comparision_filter(comparison, tables=None):
 
 
 def eval_cross_table_eq(tables, left, right):
-    if type(right) == stypes.Identifier and len(right.tokens) == 3 and '.' == right.tokens[1].value:
-        if type(left) == stypes.Identifier and len(left.tokens) == 3 and '.' == left.tokens[1].value:
+    if isinstance(right, stypes.DotName) and len(right.tokens) == 3 and '.' == right.tokens[1].value:
+        if isinstance(left, stypes.DotName) and len(left.tokens) == 3 and '.' == left.tokens[1].value:
             right_table = right.tokens[0].as_field_name()
             left_table = left.tokens[0].as_field_name()
             if True == tables.get(right_table):

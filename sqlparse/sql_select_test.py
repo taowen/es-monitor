@@ -77,6 +77,15 @@ class TestSqlSelectProjections(unittest.TestCase):
         sql_select = SqlSelect.parse('SELECT a,b FROM symbol')
         self.assertEqual(['a', 'b'], sql_select.projections.keys())
 
+    def test_projections_mixed_with_symbol(self):
+        sql_select = SqlSelect.parse('SELECT "a",b FROM symbol')
+        self.assertEqual(['a', 'b'], sql_select.projections.keys())
+
+    def test_dot(self):
+        sql_select = SqlSelect.parse('SELECT a.b FROM symbol')
+        self.assertEqual(['a.b'], sql_select.projections.keys())
+
+
 
 class TestSqlSelectSource(unittest.TestCase):
     def test_source_is_string(self):

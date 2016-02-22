@@ -437,7 +437,7 @@ class TokenList(Token):
         # a.b
         dot = self.token_next_match(0, T.Punctuation, '.')
         if dot is not None:
-            return self._get_first_name(self.token_index(dot))
+            return str(self)
 
         return self._get_first_name()
 
@@ -554,6 +554,14 @@ class Identifier(TokenList):
             return self
 
 
+class DotName(Identifier):
+    def is_field(self):
+        return True
+
+    def as_field_name(self):
+        return str(self)
+
+
 class IdentifierList(TokenList):
     """A list of :class:`~sqlparse.sql.Identifier`\'s."""
 
@@ -639,7 +647,6 @@ class Datetime(TokenList):
 
     def _to_string(self):
         return "eval_datetime('%s', %s)" % (str(self.datetime_type), str(self.datetime_value))
-
 
 
 class Expression(TokenList):
@@ -737,7 +744,6 @@ class Function(TokenList):
 
     def get_function_name(self):
         return self.tokens[0].value
-
 
 
 class Begin(TokenList):
