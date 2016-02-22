@@ -4,9 +4,11 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import unittest
+import datetime
 from sql_select import SqlSelect
 from sqlparse import tokens as ttypes
 from sqlparse import sql as stypes
+from sqlparse import datetime_evaluator
 
 
 class TestSqlSelectProjections(unittest.TestCase):
@@ -14,7 +16,6 @@ class TestSqlSelectProjections(unittest.TestCase):
         sql_select = SqlSelect.parse('SELECT * FROM symbol')
         self.assertEqual(['*'], sql_select.projections.keys())
         self.assertEqual(ttypes.Wildcard, sql_select.projections['*'].ttype)
-        self.assertEqual('symbol', sql_select.from_table)
         self.assertIsNone(sql_select.where)
         self.assertEqual(dict(), sql_select.group_by)
         self.assertEqual([], sql_select.order_by)
@@ -27,7 +28,6 @@ class TestSqlSelectProjections(unittest.TestCase):
         self.assertEqual(stypes.Function, type(sql_select.projections['COUNT(*)']))
         self.assertEqual('COUNT', sql_select.projections['COUNT(*)'].get_name())
         self.assertEqual(ttypes.Wildcard, sql_select.projections['COUNT(*)'].get_parameters()[0].ttype)
-        self.assertEqual('symbol', sql_select.from_table)
         self.assertIsNone(sql_select.where)
         self.assertEqual(dict(), sql_select.group_by)
         self.assertEqual([], sql_select.order_by)
@@ -40,7 +40,6 @@ class TestSqlSelectProjections(unittest.TestCase):
         self.assertEqual(stypes.Function, type(sql_select.projections['abc']))
         self.assertEqual('COUNT', sql_select.projections['abc'].get_name())
         self.assertEqual(ttypes.Wildcard, sql_select.projections['abc'].get_parameters()[0].ttype)
-        self.assertEqual('symbol', sql_select.from_table)
         self.assertIsNone(sql_select.where)
         self.assertEqual(dict(), sql_select.group_by)
         self.assertEqual([], sql_select.order_by)
@@ -52,7 +51,6 @@ class TestSqlSelectProjections(unittest.TestCase):
         self.assertEqual(['abc'], sql_select.projections.keys())
         self.assertEqual(stypes.Expression, type(sql_select.projections['abc']))
         self.assertEqual('a/2', str(sql_select.projections['abc']))
-        self.assertEqual('symbol', sql_select.from_table)
         self.assertIsNone(sql_select.where)
         self.assertEqual(dict(), sql_select.group_by)
         self.assertEqual([], sql_select.order_by)
@@ -66,7 +64,6 @@ class TestSqlSelectProjections(unittest.TestCase):
         self.assertEqual('COUNT(*)/2', str(sql_select.projections['abc']))
         self.assertEqual('/', sql_select.projections['abc'].operator)
         self.assertEqual(stypes.Function, type(sql_select.projections['abc'].left))
-        self.assertEqual('symbol', sql_select.from_table)
         self.assertIsNone(sql_select.where)
         self.assertEqual(dict(), sql_select.group_by)
         self.assertEqual([], sql_select.order_by)
@@ -84,24 +81,6 @@ class TestSqlSelectProjections(unittest.TestCase):
     def test_dot(self):
         sql_select = SqlSelect.parse('SELECT a.b FROM symbol')
         self.assertEqual(['a.b'], sql_select.projections.keys())
-
-
-
-class TestSqlSelectSource(unittest.TestCase):
-    def test_source_is_string(self):
-        sql_select = SqlSelect.parse('SELECT * FROM symbol')
-        self.assertEqual('symbol', sql_select.from_table)
-
-    def test_source_is_function(self):
-        sql_select = SqlSelect.parse('SELECT * FROM index("symbol")')
-        self.assertEqual(stypes.Function, type(sql_select.from_table))
-
-    def test_source_not_support_as(self):
-        try:
-            sql_select = SqlSelect.parse('SELECT * FROM index("symbol") AS abc')
-        except:
-            return
-        self.fail('should fail')
 
 
 class TestSqlSelectWhere(unittest.TestCase):
@@ -170,6 +149,50 @@ class TestSqlSelectWhere(unittest.TestCase):
         self.assertEqual("now() - eval_datetime('INTERVAL', '5 DAYS')", str(comparison.right))
 
 
+class TestSqlSelectFrom(unittest.TestCase):
+    def test_from_simple_index(self):
+        sql_select = SqlSelect.parse("SELECT * FROM symbol GROUP BY name")
+        self.assertEqual('symbol', sql_select.from_table)
+        self.assertEqual('symbol*', sql_select.from_indices)
+
+    def test_from_sinle_index(self):
+        sql_select = SqlSelect.parse("SELECT * FROM index('symbol') GROUP BY name")
+        self.assertEqual("index('symbol')", sql_select.from_table)
+        self.assertEqual('symbol', sql_select.from_indices)
+
+    def test_from_single_index_as_alias(self):
+        sql_select = SqlSelect.parse("SELECT * FROM index('symbol') AS my_table GROUP BY name")
+        self.assertEqual('my_table', sql_select.from_table)
+        self.assertEqual('symbol', sql_select.from_indices)
+
+    def test_single_year(self):
+        sql_select = SqlSelect.parse("SELECT * FROM index('symbol-%Y', '2015') AS my_table GROUP BY name")
+        self.assertEqual('symbol-2015', sql_select.from_indices)
+
+    def test_single_year_month(self):
+        sql_select = SqlSelect.parse("SELECT * FROM index('symbol-%Y-%m', '2015-06') AS my_table GROUP BY name")
+        self.assertEqual('symbol-2015-06', sql_select.from_indices)
+
+    def test_single_year_range(self):
+        sql_select = SqlSelect.parse("SELECT * FROM index('symbol-%Y-%m-%d', '2015-01-01', '2015-01-03') AS my_table GROUP BY name")
+        self.assertEqual('symbol-2015-01-01,symbol-2015-01-02,symbol-2015-01-03', sql_select.from_indices)
+
+    def test_support_now_and_interval(self):
+        datetime_evaluator.NOW = datetime.datetime(2015, 1, 2)
+        sql_select = SqlSelect.parse(
+            "SELECT * FROM index('symbol-%Y-%m-%d', now()-interval('1 days'), timestamp('2015-01-03 00:00:00')) "
+            "AS my_table GROUP BY name")
+        self.assertEqual('symbol-2015-01-01,symbol-2015-01-02,symbol-2015-01-03', sql_select.from_indices)
+
+    def test_multiple_index(self):
+        sql_select = SqlSelect.parse("SELECT * FROM (index('symbol') UNION index('quote')) AS my_table GROUP BY name")
+        self.assertEqual('symbol,quote', sql_select.from_indices)
+
+    def test_except_index(self):
+        sql_select = SqlSelect.parse("SELECT * FROM (index('symbol') EXCEPT index('quote')) AS my_table GROUP BY name")
+        self.assertEqual('symbol,-quote', sql_select.from_indices)
+
+
 class TestSqlSelectGroupBy(unittest.TestCase):
     def test_group_by_one_field(self):
         sql_select = SqlSelect.parse("SELECT * FROM symbol GROUP BY name")
@@ -236,8 +259,10 @@ class TestSqlSelectLimit(unittest.TestCase):
         sql_select = SqlSelect.parse('SELECT * FROM symbol LIMIT 1')
         self.assertEqual(1, sql_select.limit)
 
+
 class TestSqlSelectJoin(unittest.TestCase):
     def test_join_one_field(self):
-        sql_select = SqlSelect.parse('SELECT * FROM quote JOIN matched_symbols ON quote.symbol = matched_symbols.symbol')
+        sql_select = SqlSelect.parse(
+            'SELECT * FROM quote JOIN matched_symbols ON quote.symbol = matched_symbols.symbol')
         self.assertEqual('matched_symbols', sql_select.join_table)
         self.assertTrue(len(sql_select.join_conditions) > 0)

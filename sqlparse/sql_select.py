@@ -2,12 +2,14 @@ import sqlparse
 from sqlparse import tokens as ttypes
 from sqlparse import sql as stypes
 from sqlparse.ordereddict import OrderedDict
-
+import datetime
+from sqlparse import datetime_evaluator
 
 # make the result of sqlparse more usable
 class SqlSelect(object):
-    def __init__(self, tokens):
+    def __init__(self, tokens, joinable_results, joinable_queries):
         self.from_table = None
+        self.from_indices = None
         self.projections = {}
         self.group_by = OrderedDict()
         self.order_by = []
@@ -18,8 +20,8 @@ class SqlSelect(object):
         self.join_conditions = []
 
         self.buckets_names = {}
-        self.joinable_results = {}
-        self.joinable_queries = {}
+        self.joinable_results = joinable_results or {}
+        self.joinable_queries = joinable_queries or {}
 
         self.is_select_inside = False
         self.on_SELECT(tokens)
@@ -28,13 +30,14 @@ class SqlSelect(object):
                 self.is_select_inside = True
 
     @classmethod
-    def parse(cls, *args, **kwargs):
-        statement = sqlparse.parse(*args, **kwargs)[0]
-        sql_select = SqlSelect(statement.tokens)
+    def parse(cls, sql_select, joinable_results=None, joinable_queries=None):
+        statement = sqlparse.parse(sql_select)[0]
+        sql_select = SqlSelect(statement.tokens, joinable_results, joinable_queries)
         return sql_select
 
     def tables(self):
-        map = {self.from_table: True}
+        map = {}
+        map[self.from_table] = True
         for t in self.joinable_results.keys():
             map[t] = False
         for t in self.joinable_queries.keys():
@@ -73,7 +76,6 @@ class SqlSelect(object):
                     idx = self.on_JOIN(tokens, idx)
                     continue
                 else:
-                    print(tokens)
                     raise Exception('unexpected: %s' % token)
             elif isinstance(token, stypes.Where):
                 self.on_WHERE(token)
@@ -107,19 +109,17 @@ class SqlSelect(object):
             idx += 1
             if token.is_whitespace():
                 continue
+            alias = None
+            if isinstance(token, stypes.Identifier):
+                alias = token.get_name()
+                token = token.tokens[0]
             if token.is_field():
-                self.from_table = token.as_field_name()
-                break
-            elif isinstance(token, stypes.Identifier):
-                if len(token.tokens) > 1:
-                    raise Exception('unexpected: %s' % token)
-                self.from_table = token.get_name()
-                break
-            elif isinstance(token, stypes.Function):
-                self.from_table = token
-                break
+                table = token.as_field_name()
+                self.from_table = alias or table
             else:
-                raise Exception('unexpected: %s' % token)
+                self.from_table = alias or str(token)
+            self.from_indices = ','.join(translate_indices(token))
+            break
         return idx
 
     def on_LIMIT(self, tokens, idx):
@@ -235,3 +235,74 @@ class SqlSelect(object):
             if isinstance(projection, stypes.Function):
                 return True
         return False
+
+
+def translate_indices(token):
+    if token.is_field():
+        return ['%s*' % token.as_field_name()]
+    elif isinstance(token, stypes.Function):
+        functions = {'index': get_indices}
+        functions.update(datetime_evaluator.datetime_functions())
+        return eval(str(token), {}, functions)
+    elif isinstance(token, stypes.Parenthesis):
+        return translate_complex_indices(token.tokens[1:-1])
+    else:
+        raise Exception('unexpected: %s' % token)
+
+def translate_complex_indices(tokens):
+    logic_op = None
+    indices = []
+    for token in tokens:
+        if token.is_whitespace():
+            continue
+        if ttypes.Keyword == token.ttype:
+            if 'UNION' == token.value.upper():
+                logic_op = token.value.upper()
+            elif 'EXCEPT' == token.value.upper():
+                logic_op = token.value.upper()
+            else:
+                raise Exception('unexpected keyword: %s' % token.value)
+        else:
+            if indices and 'EXCEPT' == logic_op:
+                indices.extend(['-%s' % index for index in translate_indices(token)])
+            else:
+                indices.extend(translate_indices(token))
+    return indices
+
+def get_indices(index_pattern, from_datetime=None, to_datetime=None):
+    if from_datetime:
+        prefix, delimiter, datetime_pattern = index_pattern.partition('%')
+        if not delimiter:
+            raise Exception('missing datetime pattern in %s' % index_pattern)
+        datetime_pattern = '%' + datetime_pattern
+        if to_datetime:
+            from_datetime = try_strptime(from_datetime, datetime_pattern)
+            to_datetime = try_strptime(to_datetime, datetime_pattern)
+            step = None
+            if '%S' in datetime_pattern:
+                step = datetime.timedelta(seconds=1)
+            elif '%M' in datetime_pattern:
+                step = datetime.timedelta(minutes=1)
+            elif '%H' in datetime_pattern:
+                step = datetime.timedelta(hours=1)
+            elif '%d' in datetime_pattern:
+                step = datetime.timedelta(days=1)
+            else:
+                raise Exception('can not guess the step')
+            the_datetime = from_datetime
+            indices = []
+            while the_datetime <= to_datetime:
+                indices.append(the_datetime.strftime(index_pattern))
+                the_datetime += step
+            return indices
+        else:
+            the_datetime = try_strptime(from_datetime, datetime_pattern)
+            return [the_datetime.strftime(index_pattern)]
+    else:
+        return [index_pattern]
+
+
+def try_strptime(date_string, format):
+    if isinstance(date_string, datetime.datetime):
+        return date_string
+    return datetime.datetime.strptime(date_string, format)

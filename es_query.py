@@ -68,10 +68,7 @@ def create_executor(sql_selects, joinable_results=None):
             if match:
                 sql_select = match.group(1)
                 executor_name = match.group(2)
-            sql_select = SqlSelect.parse(sql_select)
-        if joinable_results:
-            sql_select.joinable_results = joinable_results
-        sql_select.joinable_queries = executor_map
+            sql_select = SqlSelect.parse(sql_select, joinable_results, executor_map)
         if not isinstance(sql_select.from_table, basestring):
             raise Exception('nested SELECT is not supported')
         if sql_select.from_table in executor_map:
@@ -96,10 +93,10 @@ def create_executor(sql_selects, joinable_results=None):
 
 
 def search_es(index, request, search_url='_search'):
+    url = ES_HOSTS + '/%s/%s' % (index, search_url)
     if DEBUG:
-        print('===== %s' % search_url)
+        print('===== %s' % url)
         print(json.dumps(request, indent=2))
-    url = ES_HOSTS + '/%s*/%s' % (index, search_url)
     try:
         resp = urllib2.urlopen(url, json.dumps(request)).read()
     except urllib2.HTTPError as e:

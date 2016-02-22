@@ -12,7 +12,7 @@ def main():
             gzipFile = gzip.GzipFile(filename)
             events = gzipFile.readlines()
             bulk_import_lines = []
-            index_name = 'githubarchive-%s' % '2015-01'
+            index_name = 'githubarchive-%s' % '2015-01-%02d' % j
             for event in events:
                 eventObj = json.loads(event)
                 bulk_import_lines.append(json.dumps(
