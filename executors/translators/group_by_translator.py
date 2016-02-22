@@ -60,7 +60,13 @@ def append_date_histogram_aggs(tail_aggs, group_by, group_by_name):
     if 'TO_CHAR' == group_by.tokens[0].value.upper():
         to_char_params = list(group_by.get_parameters())
         sql_function = to_char_params[0]
-        date_format = eval(to_char_params[1].value)
+        date_format = to_char_params[1].value[1:-1]\
+            .replace('%Y', 'yyyy')\
+            .replace('%m', 'MM')\
+            .replace('%d', 'dd')\
+            .replace('%H', 'hh')\
+            .replace('%M', 'mm')\
+            .replace('%S', 'ss')
     else:
         sql_function = group_by
     if 'DATE_TRUNC' == sql_function.tokens[0].value.upper():

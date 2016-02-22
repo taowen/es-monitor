@@ -38,6 +38,9 @@ EOF
 
 # Syntax
 
+The goal is to be able to express all the necessary elasticsearch DSL
+(used in the context of OLAP database, not full-text search engine) using SQL.
+
 ## Query multiple index
 
 ```FROM quote``` => ```quote*```
@@ -87,6 +90,10 @@ WITH SELECT symbol FROM symbol WHERE sector='Finance' LIMIT 5 AS finance_symbols
 SELECT MAX(adj_close) FROM quote
     JOIN finance_symbols ON quote.symbol = finance_symbols.symbol;
 ```
+
+## Pagination
+
+TODO
 
 # Full text queries
 
@@ -389,3 +396,546 @@ SELECT MAC(price) AS max_price
 ```
 
 TODO: script, missing
+
+## Min Aggregation
+
+```
+{
+    "aggs" : {
+        "min_price" : { "min" : { "field" : "price" } }
+    }
+}
+```
+```
+SELECT MIN(price) AS min_price
+```
+
+TODO: script, missing
+
+## Percentiles Aggregation
+
+TODO
+
+## Percentile Ranks Aggregation
+
+TODO
+
+## Scripted Metric Aggregation
+
+TODO
+
+## Stats Aggregation
+
+TODO
+
+## Sum Aggregation
+
+```
+{
+    "aggs" : {
+        "intraday_return" : { "sum" : { "field" : "change" } }
+    }
+}
+```
+```
+SELECT SUM(change) AS intraday_return
+```
+
+TODO: script, missing
+
+## Top hits Aggregation
+
+TODO
+
+## Value Count Aggregation
+
+```
+{
+    "aggs" : {
+        "grades_count" : { "value_count" : { "field" : "grade" } }
+    }
+}
+```
+```
+SELECT COUNT(grade) AS grades_count
+```
+
+TODO: script
+
+# Bucket Aggregations
+
+## Children Aggregation
+
+TODO
+
+## Date Historgram Aggregation
+
+```
+{
+    "aggs" : {
+        "articles_over_time" : {
+            "date_histogram" : {
+                "field" : "date",
+                "interval" : "month"
+            }
+        }
+    }
+}
+```
+```
+GROUP BY DATE_TRUNC('month', "date") AS articles_over_time
+```
+```
+{
+    "aggs" : {
+        "articles_over_time" : {
+            "date_histogram" : {
+                "field" : "date",
+                "interval" : "1M",
+                "format" : "yyyy-MM-dd"
+            }
+        }
+    }
+}
+```
+```
+GROUP BY TO_CHAR(DATE_TRUNC('month', "date"),'%Y-%m-%d') AS articles_over_time
+```
+
+TODO: 1.5 hours interval, timezone, offset, script, missing
+
+## Filter Aggregation
+
+```
+{
+    "aggs" : {
+        "red_products" : {
+            "filter" : { "term": { "color": "red" } },
+            "aggs" : {
+                "avg_price" : { "avg" : { "field" : "price" } }
+            }
+        }
+    }
+}
+```
+```
+WITH SELECT COUNT(*) FROM product AS all_products;
+SELECT AVG(price) AS avg_price FROM all_products WHERE color='red';
+```
+
+If from table is not another named sql, the where condition will be translated to query instead of filter aggregation.
+
+## Filters Aggregation
+
+```
+{
+  "aggs" : {
+    "messages" : {
+      "filters" : {
+        "other_bucket_key": "other_messages",
+        "filters" : {
+          "errors" :   { "term" : { "body" : "error"   }},
+          "warnings" : { "term" : { "body" : "warning" }}
+        }
+      }
+    }
+  }
+}
+```
+```
+GROUP BY CASE WHEN body='error' THEN 'errors' WHEN body='warning' THEN 'warnings' ELSE 'other_messages' END AS messages
+```
+
+## Geo Distance Aggregation
+
+TODO
+
+## GeoHash grid Aggregation
+
+TODO
+
+## Histogram Aggregation
+
+```
+{
+    "aggs" : {
+        "prices" : {
+            "histogram" : {
+                "field" : "price",
+                "interval" : 50
+            }
+        }
+    }
+}
+```
+```
+GROUP BY histogram(price, 50) AS prices
+```
+```
+{
+    "aggs" : {
+        "prices" : {
+            "histogram" : {
+                "field" : "price",
+                "interval" : 50,
+                "order" : { "_key" : "desc" }
+            }
+        }
+    }
+}
+```
+```
+GROUP BY histogram(price, 50) AS prices ORDER BY prices DESC
+```
+
+TODO: min_doc_count, offset, buckets_path, missing
+
+## IPv4 Range Aggregation
+
+TODO
+
+## Missing Aggregation
+
+TODO
+
+## Nested Aggregation
+
+TODO
+
+## Range Aggregation
+
+```
+{
+    "aggs" : {
+        "price_ranges" : {
+            "range" : {
+                "field" : "price",
+                "ranges" : [
+                    { "to" : 50 },
+                    { "from" : 50, "to" : 100 },
+                    { "from" : 100 }
+                ]
+            }
+        }
+    }
+}
+```
+```
+GROUP BY CASE
+    WEHN price < 50 THEN 'range1'
+    WHEN price >= 50 AND price < 100 THEN 'range2'
+    WHEN price >= 100 THEN 'range3'
+END AS price_ranges
+```
+
+TODO: script
+
+## Reverse nested Aggregation
+
+TODO
+
+## Sampler Aggregation
+
+TODO
+
+## Significant Terms Aggregation
+
+TODO
+
+## Terms Aggregation
+
+TODO
+
+# Pipeline Aggregations
+
+## Avg Bucket Aggregation
+
+```
+{
+    "aggs" : {
+        "sales_per_month" : {
+            "date_histogram" : {
+                "field" : "date",
+                "interval" : "month"
+            },
+            "aggs": {
+                "sales": {
+                    "sum": {
+                        "field": "price"
+                    }
+                }
+            }
+        },
+        "avg_monthly_sales": {
+            "avg_bucket": {
+                "buckets_path": "sales_per_month>sales"
+            }
+        }
+    }
+}
+```
+```
+WITH SELECT month, SUM(price) AS sales FROM sale GROUP BY DATE_TRUNC('month', "date") AS month AS sales_per_month;
+SELECT AVG(sales) AS avg_monthly_sales FROM sales_per_month;
+```
+
+TODO: gap_policy
+
+## Derivative Aggregation
+
+First Order Derivative
+```
+{
+    "aggs" : {
+        "sales_per_month" : {
+            "date_histogram" : {
+                "field" : "date",
+                "interval" : "month"
+            },
+            "aggs": {
+                "sales": {
+                    "sum": {
+                        "field": "price"
+                    }
+                },
+                "sales_deriv": {
+                    "derivative": {
+                        "buckets_path": "sales"
+                    }
+                }
+            }
+        }
+    }
+}
+```
+```
+SELECT month, SUM(price) AS sales, DERIVATIVE(sales) AS sales_deriv
+    FROM sale GROUP BY DATE_TRUNC('month', "date") AS month
+```
+Second Order Derivative
+```
+{
+    "aggs" : {
+        "sales_per_month" : {
+            "date_histogram" : {
+                "field" : "date",
+                "interval" : "month"
+            },
+            "aggs": {
+                "sales": {
+                    "sum": {
+                        "field": "price"
+                    }
+                },
+                "sales_deriv": {
+                    "derivative": {
+                        "buckets_path": "sales"
+                    }
+                },
+                "sales_2nd_deriv": {
+                    "derivative": {
+                        "buckets_path": "sales_deriv"
+                    }
+                }
+            }
+        }
+    }
+}
+```
+```
+SELECT month, SUM(price) AS sales, DERIVATIVE(sales) AS sales_deriv, DERIVATIVE(sales_deriv) AS sales_2nd_deriv
+    FROM sale GROUP BY DATE_TRUNC('month', "date") AS month
+```
+
+TODO: unit, gap_policy
+
+## Max Bucket Aggregation
+
+```
+{
+    "aggs" : {
+        "sales_per_month" : {
+            "date_histogram" : {
+                "field" : "date",
+                "interval" : "month"
+            },
+            "aggs": {
+                "sales": {
+                    "sum": {
+                        "field": "price"
+                    }
+                }
+            }
+        },
+        "max_monthly_sales": {
+            "max_bucket": {
+                "buckets_path": "sales_per_month>sales"
+            }
+        }
+    }
+}
+```
+```
+WITH SELECT month, SUM(price) AS sales FROM sale GROUP BY DATE_TRUNC('month', "date") AS month AS sales_per_month;
+SELECT MAX(sales) AS max_monthly_sales FROM sales_per_month;
+```
+
+TODO: gap_policy
+
+## Min Bucket Aggregation
+
+```
+{
+    "aggs" : {
+        "sales_per_month" : {
+            "date_histogram" : {
+                "field" : "date",
+                "interval" : "month"
+            },
+            "aggs": {
+                "sales": {
+                    "sum": {
+                        "field": "price"
+                    }
+                }
+            }
+        },
+        "min_monthly_sales": {
+            "min_bucket": {
+                "buckets_path": "sales_per_month>sales"
+            }
+        }
+    }
+}
+```
+```
+WITH SELECT month, SUM(price) AS sales FROM sale GROUP BY DATE_TRUNC('month', "date") AS month AS sales_per_month;
+SELECT MIN(sales) AS min_monthly_sales FROM sales_per_month;
+```
+
+TODO: gap_policy
+
+## Sum Bucket Aggregation
+
+```
+{
+    "aggs" : {
+        "sales_per_month" : {
+            "date_histogram" : {
+                "field" : "date",
+                "interval" : "month"
+            },
+            "aggs": {
+                "sales": {
+                    "sum": {
+                        "field": "price"
+                    }
+                }
+            }
+        },
+        "sum_monthly_sales": {
+            "sum_bucket": {
+                "buckets_path": "sales_per_month>sales"
+            }
+        }
+    }
+}
+```
+```
+WITH SELECT month, SUM(price) AS sales FROM sale GROUP BY DATE_TRUNC('month', "date") AS month AS sales_per_month;
+SELECT SUM(sales) AS sum_monthly_sales FROM sales_per_month;
+```
+
+TODO: gap_policy
+
+## Stats Bucket Aggregation
+
+TODO
+
+## Extended Stats Bucket Aggregation
+
+TODO
+
+## Percentiles Bucket Aggregation
+
+TODO
+
+## Moving Average Aggregation
+
+TODO
+
+## Cumulative Sum Aggregation
+
+```
+{
+    "aggs" : {
+        "sales_per_month" : {
+            "date_histogram" : {
+                "field" : "date",
+                "interval" : "month"
+            },
+            "aggs": {
+                "sales": {
+                    "sum": {
+                        "field": "price"
+                    }
+                },
+                "cumulative_sales": {
+                    "cumulative_sum": {
+                        "buckets_path": "sales"
+                    }
+                }
+            }
+        }
+    }
+}
+```
+```
+SELECT month, SUM(price) AS sales, CSUM(sales) AS cumulative_sales
+    FROM sale GROUP BY DATE_TRUNC('month', "date") AS month
+```
+
+## Bucket Script Aggregation
+
+TODO
+
+## Bucket Selector Aggregation
+
+```
+{
+    "aggs" : {
+        "sales_per_month" : {
+            "date_histogram" : {
+                "field" : "date",
+                "interval" : "month"
+            },
+            "aggs": {
+                "total_sales": {
+                    "sum": {
+                        "field": "price"
+                    }
+                }
+                "sales_bucket_filter": {
+                    "bucket_selector": {
+                        "buckets_path": {
+                          "totalSales": "total_sales"
+                        },
+                        "script": "totalSales <= 50"
+                    }
+                }
+            }
+        }
+    }
+}
+```
+```
+SELECT month, SUM(price) AS total_sales
+    FROM sale GROUP BY DATE_TRUNC('month', "date") AS month
+    HAVING total_sales <= 50
+```
+
+TODO: gap_policy
+
+## Serial Differencing Aggregation
+
+TODO
