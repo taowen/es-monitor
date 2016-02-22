@@ -34,4 +34,76 @@ EOF
 
 具体SQL语法支持地程度，请阅读：https://segmentfault.com/a/1190000003502849
 
+# Full text queries
 
+## Match Query
+
+TODO
+
+## Multi Match Query
+
+TODO
+
+## Common Terms Query
+
+TODO
+
+## Query String Query
+
+TODO
+
+## Simple Query String Query
+
+TODO
+
+# Term level queries
+
+## Term Query
+
+```
+{
+    "term" : { "user" : "Kimchy" }
+}
+```
+
+```
+WHERE user='Kimchy'
+```
+
+If field is analyzed, term query actually means contains instead of fully equal
+
+## Terms Query
+
+TODO
+
+## Range Query
+
+```
+{
+    "range" : {
+        "age" : {
+            "gte" : 10,
+            "lte" : 20
+        }
+    }
+}
+```
+
+```
+WHERE age >= 10 AND age <=  20
+```
+
+```
+{
+    "range" : {
+        "date" : {
+            "gte" : "now-1d",
+            "lt" :  "now"
+        }
+    }
+}
+```
+
+```
+WHERE "date" >= now() - INTERVAL '1 day' AND "date" < now()
+```
