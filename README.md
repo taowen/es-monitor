@@ -1,3 +1,5 @@
+[![Gitter](https://badges.gitter.im/taowen/es-monitor.svg)](https://gitter.im/taowen/es-monitor?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+
 # 插件说明
 
 ```
