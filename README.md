@@ -1,4 +1,4 @@
-## 插件说明
+# 插件说明
 
 ```
 ./plugin.sh https://url-to-params
@@ -23,6 +23,8 @@ SELECT count(*) AS value FROM gs_api_track
 SAVE RESULT AS gs_api_track.count;
 ```
 
+# 命令行 SQL 查询 Elasticsearch
+
 在命令行上测试的时候也可以用stdin传sql参数，比如
 
 ```
@@ -32,7 +34,59 @@ cat << EOF | python es_query.py http://es_hosts
 EOF
 ```
 
-具体SQL语法支持地程度，请阅读：https://segmentfault.com/a/1190000003502849
+教程请阅读：https://segmentfault.com/a/1190000003502849
+
+# Syntax
+
+## Query multiple index
+
+```FROM quote``` => ```quote*```
+
+```FROM index('quote')``` => ```quote```
+
+```FROM index('quote-%Y-%m-%d', '2015-01-01')``` => ```quote-2015-01-01```
+
+```FROM index('quote-%Y-%m-%d', '2015-01-01', '2015-01-03')``` => ```quote-2015-01-01,quote-2015-01-02,quote-2015-01-03```
+
+```FROM index('quote-%Y-%m-%d', now())```
+
+```FROM index('quote-%Y-%m-%d', now() - interval('2 DAYS'))```
+
+```FROM (index('quote') UNION index('symbol')) AS my_table``` => ```quote,symbol```
+
+```FROM (quote EXCEPT index('quote-2015-01-01')) AS my_table``` => ```quote*,-quote-2015-01-01```
+
+## Drill down by sub aggregation
+
+Elasticsearch support sub aggregations. It can be expressed by multiple sql statements
+
+```
+WITH SELECT MAX(market_cap) AS max_all_times FROM symbol AS all_symbols;
+WITH SELECT ipo_year, MAX(market_cap) AS max_this_year INSIDE all_symbols
+    GROUP BY ipo_year LIMIT 2 AS per_ipo_year;
+```
+
+```SELECT INSIDE``` can also be ```SELECT FROM```
+
+## Client side join
+
+```
+SELECT symbol FROM symbol WHERE sector='Finance' LIMIT 5;
+SAVE RESULT AS finance_symbols;
+SELECT MAX(adj_close) FROM quote
+    JOIN finance_symbols ON quote.symbol = finance_symbols.symbol;
+REMOVE RESULT finance_symbols;
+```
+
+## Server side join
+
+It requires https://github.com/sirensolutions/siren-join
+
+```
+WITH SELECT symbol FROM symbol WHERE sector='Finance' LIMIT 5 AS finance_symbols;
+SELECT MAX(adj_close) FROM quote
+    JOIN finance_symbols ON quote.symbol = finance_symbols.symbol;
+```
 
 # Full text queries
 
