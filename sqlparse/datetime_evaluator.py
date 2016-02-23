@@ -5,7 +5,7 @@ NOW = None
 
 
 def datetime_functions():
-    functions = {'now': eval_now, 'eval_datetime': eval_datetime, 'interval': eval_interval, 'timestamp': eval_timestamp}
+    functions = {'now': eval_now, 'today': eval_today, 'eval_datetime': eval_datetime, 'interval': eval_interval, 'timestamp': eval_timestamp}
     for k, v in functions.items():
         functions[k.upper()] = v
     return functions
@@ -14,6 +14,9 @@ def datetime_functions():
 def eval_now():
     return NOW or datetime.datetime.now()
 
+def eval_today():
+    now = eval_now()
+    return datetime.datetime(now.year, now.month, now.day, tzinfo=now.tzinfo)
 
 def eval_interval(datetime_value):
     return eval_datetime('INTERVAL', datetime_value)

@@ -3,6 +3,7 @@ import es_query
 import datetime
 from sqlparse import datetime_evaluator
 
+
 class TestSelectFromLeafWhere(unittest.TestCase):
     def test_field_eq_string(self):
         executor = es_query.create_executor("SELECT * FROM symbol WHERE exchange='nyse'")
@@ -152,6 +153,11 @@ class TestSelectFromLeafWhere(unittest.TestCase):
         executor = es_query.create_executor("SELECT * FROM symbol WHERE ts > now() - INTERVAL '1 DAY'")
         self.assertEqual({'query': {'range': {'ts': {'gt': 1470585600000L - 24 * 60 * 60 * 1000}}}}, executor.request)
 
+    def test_today_expression(self):
+        datetime_evaluator.NOW = datetime.datetime(2016, 8, 8)
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE ts > today() - interval('1 day')")
+        self.assertEqual({'query': {'range': {'ts': {'gt': 1470585600000L - 24 * 60 * 60 * 1000}}}}, executor.request)
+
     def test_timestamp(self):
         executor = es_query.create_executor("SELECT * FROM symbol WHERE ts > TIMESTAMP '2016-08-08 00:00:00'")
         self.assertEqual({'query': {'range': {'ts': {'gt': 1470585600000L}}}}, executor.request)
@@ -159,4 +165,3 @@ class TestSelectFromLeafWhere(unittest.TestCase):
     def test_in(self):
         executor = es_query.create_executor("SELECT * FROM symbol WHERE symbol IN ('AAPL', 'GOOG')")
         self.assertEqual({'query': {'terms': {u'symbol': ('AAPL', 'GOOG')}}}, executor.request)
-

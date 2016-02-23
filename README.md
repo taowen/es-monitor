@@ -238,7 +238,9 @@ WHERE "date" >= now() - INTERVAL '1 day' AND "date" < now()
     }
 }
 ```
-TODO
+```
+WHERE "date" >= today() - interval('1 day') AND "date" < today()
+```
 ```
 {
     "range" : {
@@ -253,6 +255,8 @@ TODO
 ```
 WHERE born >= TIMESTAMP '2012-01-01 00:00:00' AND born <= TIMESTAMP '2013-01-01 00：00：00'
 ```
+
+TODO: timezone
 
 ## Exists Query
 
