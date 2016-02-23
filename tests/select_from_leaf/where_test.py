@@ -156,3 +156,7 @@ class TestSelectFromLeafWhere(unittest.TestCase):
         executor = es_query.create_executor("SELECT * FROM symbol WHERE ts > TIMESTAMP '2016-08-08 00:00:00'")
         self.assertEqual({'query': {'range': {'ts': {'gt': 1470585600000L}}}}, executor.request)
 
+    def test_in(self):
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE symbol IN ('AAPL', 'GOOG')")
+        self.assertEqual({'query': {'terms': {u'symbol': ('AAPL', 'GOOG')}}}, executor.request)
+

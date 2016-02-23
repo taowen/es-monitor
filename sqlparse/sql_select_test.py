@@ -148,6 +148,14 @@ class TestSqlSelectWhere(unittest.TestCase):
         self.assertEqual('a', str(comparison.left))
         self.assertEqual("now() - eval_datetime('INTERVAL', '5 DAYS')", str(comparison.right))
 
+    def test_in(self):
+        sql_select = SqlSelect.parse("SELECT * FROM symbol WHERE symbol IN ('AAPL', 'GOOG')")
+        comparison = sql_select.where.tokens[-1]
+        self.assertEqual(stypes.Comparison, type(comparison))
+        self.assertEqual('IN', comparison.operator)
+        self.assertEqual('symbol', str(comparison.left))
+        self.assertEqual("('AAPL', 'GOOG')", str(comparison.right))
+
 
 class TestSqlSelectFrom(unittest.TestCase):
     def test_from_simple_index(self):

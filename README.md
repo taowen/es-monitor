@@ -181,7 +181,20 @@ If field is analyzed, term query actually means contains instead of fully equal
 
 ## Terms Query
 
-TODO
+```
+{
+    "constant_score" : {
+        "filter" : {
+            "terms" : { "user" : ["kimchy", "elasticsearch"]}
+        }
+    }
+}
+```
+```
+WHERE user IN ('kimchy', 'elasticsearch')
+```
+
+Terms look up will not be supported, use server side join instead.
 
 ## Range Query
 

@@ -32,7 +32,6 @@ class SelectInsideLeafGroupByTest(unittest.TestCase):
         executor = es_query.create_executor(
             "SELECT year, MAX(adj_close) FROM quote WHERE symbol='AAPL' "
             "GROUP BY TO_CHAR(date_trunc('year',\"date\"), '%Y-%m-%d') AS year")
-        print(executor.request)
         self.assertEqual(
             {'query': {'term': {'symbol': 'AAPL'}}, 'aggs': {
                 'year': {'date_histogram': {'field': 'date', 'interval': 'year',
