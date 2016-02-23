@@ -49,5 +49,28 @@ def translate():
         return json.dumps(resp, indent=2)
 
 
+@app.route('/search', methods=['GET', 'POST'])
+def search():
+    if request.method == 'GET':
+        sql = request.args.get('q')
+    else:
+        sql = request.get_data(parse_form_data=False)
+    es_hosts = request.args.get('by')
+    try:
+        resp = {
+            'error': None,
+            'data': es_query.execute_sql(es_hosts, sql)
+        }
+        return json.dumps(resp, indent=2)
+    except:
+        etype, value, tb = sys.exc_info()
+        resp = {
+            'traceback': traceback.format_exception(etype, value, tb),
+            'error': str(value),
+            'data': None
+        }
+        return json.dumps(resp, indent=2)
+
+
 if __name__ == '__main__':
     app.run()
