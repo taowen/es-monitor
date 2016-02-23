@@ -41,8 +41,10 @@ def create_compound_filter(tokens, tables=None):
                         new_filter = {'bool': {'must_not': [new_filter]}}
                     current_filter = {'bool': {'should': [current_filter, new_filter]}}
                 elif 'AND' == logic_op:
-                    if try_merge_filter(new_filter, last_filter):
-                        pass
+                    merged_filter = try_merge_filter(new_filter, last_filter)
+                    if merged_filter:
+                        last_filter.clear()
+                        last_filter.update(merged_filter)
                     elif is_not:
                         is_not = False
                         if isinstance(current_filter, dict) and ['bool'] == current_filter.keys():
@@ -83,11 +85,17 @@ def try_merge_filter(new_filter, last_filter):
         for k in new_filter['range']:
             for o in new_filter['range'][k]:
                 if last_filter['range'].get(k, {}).get(o):
-                    return False
+                    return None
             for o in new_filter['range'][k]:
                 last_filter['range'][k][o] = new_filter['range'][k][o]
-        return True
-    return False
+        return dict(last_filter)
+    if ['type'] == last_filter.keys() and ['ids'] == new_filter.keys():
+        last_filter, new_filter = new_filter, last_filter
+    if ['type'] == new_filter.keys() and ['ids'] == last_filter.keys():
+        if not last_filter['ids'].get('type'):
+            last_filter['ids']['type'] = new_filter['type']['value']
+            return dict(last_filter)
+    return None
 
 
 def create_comparision_filter(comparison, tables=None):
@@ -128,6 +136,8 @@ def create_comparision_filter(comparison, tables=None):
         field = left_operand.as_field_name()
         if '_type' == field:
             return {'type': {'value': right_operand_as_value}}
+        elif '_id' == field:
+            return {'ids': {'value': [right_operand_as_value]}}
         else:
             return {'term': {field: right_operand_as_value}}
     elif operator.upper() in ('LIKE', 'ILIKE'):
@@ -140,7 +150,11 @@ def create_comparision_filter(comparison, tables=None):
         values = eval(right_operand.value)
         if not isinstance(values, tuple):
             values = (values,)
-        return {'terms': {left_operand.as_field_name(): values}}
+        values = list(values)
+        if '_id' == left_operand.as_field_name():
+            return {'ids': {'value': values}}
+        else:
+            return {'terms': {left_operand.as_field_name(): values}}
     elif re.match('IS\s+NOT', operator.upper()):
         if 'NULL' != right_operand.value.upper():
             raise Exception('unexpected: %s' % repr(right_operand))
@@ -181,6 +195,7 @@ class FieldRef(object):
     def __unicode__(self):
         return repr(self)
 
+
 def eval_value(token):
     val = str(token)
     try:
@@ -190,4 +205,3 @@ def eval_value(token):
         return val
     except:
         return None
-

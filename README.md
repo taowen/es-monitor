@@ -322,7 +322,27 @@ WHERE _type='my_type'
 
 ## Ids Query
 
-TODO
+```
+{
+    "ids" : {
+        "values" : ["1", "4", "100"]
+    }
+}
+```
+```
+WHERE _id IN ('1','4','100')
+```
+```
+{
+    "ids" : {
+        "type" : "my_type",
+        "values" : ["1", "4", "100"]
+    }
+}
+```
+```
+WHERE _type='my_type' AND _id IN ('1','4','100')
+```
 
 # Compound queries
 

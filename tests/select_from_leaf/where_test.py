@@ -164,8 +164,29 @@ class TestSelectFromLeafWhere(unittest.TestCase):
 
     def test_in(self):
         executor = es_query.create_executor("SELECT * FROM symbol WHERE symbol IN ('AAPL', 'GOOG')")
-        self.assertEqual({'query': {'terms': {u'symbol': ('AAPL', 'GOOG')}}}, executor.request)
+        self.assertEqual({'query': {'terms': {u'symbol': ['AAPL', 'GOOG']}}}, executor.request)
 
     def test_type_eq(self):
         executor = es_query.create_executor("SELECT * FROM symbol WHERE _type = 'symbol'")
         self.assertEqual({'query': {'type': {'value': 'symbol'}}}, executor.request)
+
+    def test_id_eq(self):
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE _id = '1'")
+        self.assertEqual({'query': {'ids': {'value': ['1']}}}, executor.request)
+
+    def test_id_in(self):
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE _id IN ('1', '2')")
+        self.assertEqual({'query': {'ids': {'value': ['1', '2']}}}, executor.request)
+
+    def test_type_merged_with_ids(self):
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE _type = 'symbol' AND _id = '1'")
+        self.assertEqual({'query': {'ids': {'value': ['1'], 'type': 'symbol'}}}, executor.request)
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE _type = 'symbol' AND _id IN ('1', '2')")
+        self.assertEqual({'query': {'ids': {'value': ['1', '2'], 'type': 'symbol'}}}, executor.request)
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE _id IN ('1', '2') AND _type = 'symbol'")
+        self.assertEqual({'query': {'ids': {'value': ['1', '2'], 'type': 'symbol'}}}, executor.request)
+        executor = es_query.create_executor(
+            "SELECT * FROM symbol WHERE _id IN ('1', '2') AND _type = 'symbol' AND _type='abc'")
+        self.assertEqual({'query': {
+        'bool': {'filter': [{'ids': {'type': 'symbol', 'value': ['1', '2']}}, {'type': {'value': 'abc'}}]}}},
+                         executor.request)
