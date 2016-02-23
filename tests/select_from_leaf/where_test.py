@@ -165,3 +165,7 @@ class TestSelectFromLeafWhere(unittest.TestCase):
     def test_in(self):
         executor = es_query.create_executor("SELECT * FROM symbol WHERE symbol IN ('AAPL', 'GOOG')")
         self.assertEqual({'query': {'terms': {u'symbol': ('AAPL', 'GOOG')}}}, executor.request)
+
+    def test_type_eq(self):
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE _type = 'symbol'")
+        self.assertEqual({'query': {'type': {'value': 'symbol'}}}, executor.request)

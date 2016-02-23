@@ -255,6 +255,12 @@ WHERE "date" >= today() - interval('1 day') AND "date" < today()
 ```
 WHERE born >= TIMESTAMP '2012-01-01 00:00:00' AND born <= TIMESTAMP '2013-01-01 00：00：00'
 ```
+Suported datetime function are
+
+- datetime: TIMESTAMP '2012-01-01 00:00:00' can also be timestamp('2012-01-01 00:00:00')
+- day/hour/minute/second interval: INTERVAL '1 DAY' can also be interval('1 day')
+- current datetime: now()
+- current day: today()
 
 TODO: timezone
 
@@ -303,7 +309,16 @@ TODO
 
 ## Type Query
 
-TODO
+```
+{
+    "type" : {
+        "value" : "my_type"
+    }
+}
+```
+```
+WHERE _type='my_type'
+```
 
 ## Ids Query
 
