@@ -379,6 +379,10 @@ WHERE user='kimchy' AND tag='tech' AND NOT (age >= 10 AND age < 20) AND (tag='wo
 
 TODO: minimum_should_match
 
+## Indicies Query
+
+TODO
+
 ## Limit Query
 
 TODO

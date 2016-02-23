@@ -82,6 +82,10 @@ class TestSqlSelectProjections(unittest.TestCase):
         sql_select = SqlSelect.parse('SELECT a.b FROM symbol')
         self.assertEqual(['a.b'], sql_select.projections.keys())
 
+    def test_count_distinct_dot(self):
+        sql_select = SqlSelect.parse('SELECT COUNT(DISTINCT a.b) AS c FROM symbol')
+        self.assertEqual('a.b', str(sql_select.projections['c'].get_parameters()[-1]))
+
 
 class TestSqlSelectWhere(unittest.TestCase):
     def test_bigger_than(self):

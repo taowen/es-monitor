@@ -42,3 +42,15 @@ class SelectInsideLeafMetricTest(unittest.TestCase):
         self.assertEqual(
             {'aggs': {'SUM(market_cap)': {'sum': {'field': 'market_cap'}}}, 'size': 0},
             executor.request)
+
+    def test_count_dot(self):
+        executor = es_query.create_executor("SELECT COUNT(a.b) FROM symbol")
+        self.assertEqual(
+            {'aggs': {'COUNT(a.b)': {'value_count': {'field': u'a.b'}}}, 'size': 0},
+            executor.request)
+
+    def test_count_distinct_dot(self):
+        executor = es_query.create_executor("SELECT COUNT(DISTINCT a.b) FROM symbol")
+        self.assertEqual(
+            {'aggs': {'COUNT(DISTINCT a.b)': {'cardinality': {'field': u'a.b'}}}, 'size': 0},
+            executor.request)

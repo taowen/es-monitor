@@ -101,7 +101,7 @@ def create_index_template():
     request = urllib2.Request('http://localhost:9200/_template/symbol', data=json.dumps({
         'template': 'symbol',
         'settings': {
-            'number_of_shards': 1,
+            'number_of_shards': 3,
             'number_of_replicas': 0
         },
         'mappings': {

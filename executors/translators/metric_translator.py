@@ -35,12 +35,12 @@ def translate_metric(buckets_names, sql_function, projection_name):
             selector = lambda bucket: bucket[projection_name]['value']
             if count_keyword:
                 if 'DISTINCT' == count_keyword.value.upper():
-                    request = {'cardinality': {'field': params[-1].value}}
+                    request = {'cardinality': {'field': params[-1].as_field_name()}}
                     return request, selector
                 else:
                     raise Exception('unexpected: %s' % repr(count_keyword))
             else:
-                request = {'value_count': {'field': params[0].value}}
+                request = {'value_count': {'field': params[0].as_field_name()}}
                 return request, selector
     elif sql_function_name in ('MAX', 'MIN', 'AVG', 'SUM'):
         if len(sql_function.get_parameters()) != 1:
