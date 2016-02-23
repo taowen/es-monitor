@@ -1,0 +1,81 @@
+<!doctype html>
+<html class="no-js">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="description" content="">
+    <meta name="keywords" content="">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+    <title>Data Explorer</title>
+
+    <!-- Set render engine for 360 browser -->
+    <meta name="renderer" content="webkit">
+
+    <!-- No Baidu Siteapp-->
+    <meta http-equiv="Cache-Control" content="no-siteapp"/>
+
+    <link rel="stylesheet" href="//cdn.staticfile.org/amazeui/2.5.0/css/amazeui.min.css">
+    <link rel="stylesheet" href="/res/explorer.css">
+</head>
+<body>
+<!--[if lte IE 9]>
+<p class="browsehappy">你正在使用<strong>过时</strong>的浏览器，Amaze UI 暂不支持。 请 <a href="http://browsehappy.com/" target="_blank">升级浏览器</a>
+    以获得更好的体验！</p>
+<![endif]-->
+
+<header class="am-topbar explorer-header">
+    <div class="am-topbar-brand">
+        <strong>Data Explorer</strong>
+    </div>
+    <button class="am-topbar-btn am-topbar-toggle am-btn am-btn-sm am-btn-success am-show-sm-only"
+            data-am-collapse="{target: '#topbar-collapse'}"><span class="am-sr-only">导航切换</span> <span
+            class="am-icon-bars"></span></button>
+</header>
+
+<div class="am-cf explorer-main">
+    <!-- content start -->
+    <div class="explorer-content">
+        <div class="am-cf am-padding">
+            <div class="am-fl am-cf"><strong class="am-text-primary am-text-lg">Query</strong> /
+                <small>visualize</small>
+            </div>
+        </div>
+        <form class="am-u-sm-12 am-form">
+            <fieldset>
+                <div class="am-form-group">
+                    <label for="sql">SQL</label><small>(<a href="#help-panel" data-am-offcanvas>show help</a>)</small>
+                    <textarea id="sql" placeholder="Query via SQL..." rows="10"></textarea>
+                </div>
+            </fieldset>
+        </form>
+        <div class="am-margin">
+            <button type="button" class="am-btn am-btn-primary am-btn-xs">Query</button>
+        </div>
+    </div>
+    <!-- content end -->
+    <!-- side-bar -->
+    <div id="help-panel" class="am-offcanvas">
+        <div class="am-offcanvas-bar am-offcanvas-bar-flip">
+            <div class="am-offcanvas-content">
+                <p>
+                    我不愿让你一个人 <br/>
+                    承受这世界的残忍 <br/>
+                    我不愿眼泪陪你到 永恒
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!--[if (gte IE 9)|!(IE)]><!-->
+<script src="http://libs.baidu.com/jquery/1.11.3/jquery.min.js"></script>
+<!--<![endif]-->
+<!--[if lte IE 8 ]>
+<script src="http://libs.baidu.com/jquery/1.11.3/jquery.min.js"></script>
+<script src="http://cdn.staticfile.org/modernizr/2.8.3/modernizr.js"></script>
+<script src="http://cdn.staticfile.org/amazeui/2.5.0/js/amazeui.ie8polyfill.min.js"></script>
+<![endif]-->
+<script src="http://cdn.staticfile.org/amazeui/2.5.0/js/amazeui.min.js"></script>
+</body>
+</html>

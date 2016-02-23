@@ -5,12 +5,12 @@ import os
 import sys
 import traceback
 
-from flask import Flask
-from flask import request
+import flask
 
 import es_query
 
-app = Flask(__name__)
+app_dir = os.path.dirname(__file__)
+app = flask.Flask(__name__, template_folder=app_dir)
 
 if not os.path.exists('log'):
     os.mkdir('log')
@@ -20,16 +20,21 @@ app.logger.addHandler(handler)
 
 
 @app.route('/')
-def hello_world():
-    return 'Hello World!'
+def explorer():
+    return flask.render_template('explorer.html')
+
+
+@app.route('/res/<path:path>')
+def send_res(path):
+    return flask.send_from_directory(os.path.join(app_dir, 'res'), path)
 
 
 @app.route('/translate', methods=['GET', 'POST'])
 def translate():
-    if request.method == 'GET':
-        sql = request.args.get('q')
+    if flask.request.method == 'GET':
+        sql = flask.request.args.get('q')
     else:
-        sql = request.get_data(parse_form_data=False)
+        sql = flask.request.get_data(parse_form_data=False)
     try:
         executor = es_query.create_executor(sql.split(';'))
         es_req = executor.request
@@ -51,11 +56,11 @@ def translate():
 
 @app.route('/search', methods=['GET', 'POST'])
 def search():
-    if request.method == 'GET':
-        sql = request.args.get('q')
+    if flask.request.method == 'GET':
+        sql = flask.request.args.get('q')
     else:
-        sql = request.get_data(parse_form_data=False)
-    es_hosts = request.args.get('by')
+        sql = flask.request.get_data(parse_form_data=False)
+    es_hosts = flask.request.args.get('by')
     try:
         resp = {
             'error': None,
