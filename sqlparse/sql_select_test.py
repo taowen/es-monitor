@@ -160,6 +160,15 @@ class TestSqlSelectWhere(unittest.TestCase):
         self.assertEqual('symbol', str(comparison.left))
         self.assertEqual("('AAPL', 'GOOG')", str(comparison.right))
 
+    def test_parameter(self):
+        sql_select = SqlSelect.parse("SELECT * FROM symbol WHERE a = %(param)s")
+        comparison = sql_select.where.tokens[-1]
+        self.assertEqual(stypes.Comparison, type(comparison))
+        self.assertEqual('=', comparison.operator)
+        self.assertEqual('a', str(comparison.left))
+        self.assertEqual('%(param)s', str(comparison.right))
+        self.assertEqual(ttypes.Name.Placeholder, comparison.right.ttype)
+
 
 class TestSqlSelectFrom(unittest.TestCase):
     def test_from_simple_index(self):

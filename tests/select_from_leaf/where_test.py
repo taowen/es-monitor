@@ -8,6 +8,14 @@ class TestSelectFromLeafWhere(unittest.TestCase):
     def test_field_eq_string(self):
         executor = es_query.create_executor("SELECT * FROM symbol WHERE exchange='nyse'")
         self.assertEqual({'query': {'term': {'exchange': 'nyse'}}}, executor.request)
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE exchange=%(exchange)s")
+        self.assertEqual({
+            'query': {'term': {u'exchange': '%(exchange)s'}},
+            '_parameters_': {u'exchange': {
+                'path': ['query', 'term', u'exchange'],
+                'field_hint': 'exchange'
+            }}}
+            , executor.request)
 
     def test_and(self):
         executor = es_query.create_executor("SELECT * FROM symbol WHERE exchange='nyse' AND sector='Technology'")
@@ -81,6 +89,14 @@ class TestSelectFromLeafWhere(unittest.TestCase):
         self.assertEqual(
             {'query': {'range': {'last_sale': {'gt': 1000.0}}}},
             executor.request)
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE last_sale > %(param1)s")
+        self.assertEqual(
+            {'query': {'range': {u'last_sale': {'gt': '%(param1)s'}}},
+             '_parameters_': {u'param1': {
+                 'path': ['query', 'range', u'last_sale', 'gt'],
+                 'field_hint': 'last_sale'
+             }}},
+            executor.request)
 
     def test_field_gte_numeric(self):
         executor = es_query.create_executor("SELECT * FROM symbol WHERE last_sale >= 1000")
@@ -104,6 +120,15 @@ class TestSelectFromLeafWhere(unittest.TestCase):
         executor = es_query.create_executor("SELECT * FROM symbol WHERE last_sale != 1000")
         self.assertEqual(
             {'query': {'bool': {'must_not': {'term': {'last_sale': 1000}}}}},
+            executor.request)
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE 1000 != last_sale")
+        self.assertEqual(
+            {'query': {'bool': {'must_not': {'term': {'last_sale': 1000}}}}},
+            executor.request)
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE last_sale != %(param1)s")
+        self.assertEqual(
+            {'query': {'bool': {'must_not': {'term': {u'last_sale': '%(param1)s'}}}}, '_parameters_': {
+                u'param1': {'path': ['query', 'bool', 'must_not', 'term', u'last_sale'], 'field_hint': u'last_sale'}}},
             executor.request)
 
     def test_field_in_range(self):
@@ -165,6 +190,11 @@ class TestSelectFromLeafWhere(unittest.TestCase):
     def test_in(self):
         executor = es_query.create_executor("SELECT * FROM symbol WHERE symbol IN ('AAPL', 'GOOG')")
         self.assertEqual({'query': {'terms': {u'symbol': ['AAPL', 'GOOG']}}}, executor.request)
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE symbol IN %(param1)s")
+        self.assertEqual(
+            {'query': {'terms': {u'symbol': '%(param1)s'}},
+             '_parameters_': {u'param1': {'path': ['query', 'terms', u'symbol'], 'field_hint': u'symbol'}}},
+            executor.request)
 
     def test_type_eq(self):
         executor = es_query.create_executor("SELECT * FROM symbol WHERE _type = 'symbol'")
@@ -188,5 +218,14 @@ class TestSelectFromLeafWhere(unittest.TestCase):
         executor = es_query.create_executor(
             "SELECT * FROM symbol WHERE _id IN ('1', '2') AND _type = 'symbol' AND _type='abc'")
         self.assertEqual({'query': {
-        'bool': {'filter': [{'ids': {'type': 'symbol', 'value': ['1', '2']}}, {'type': {'value': 'abc'}}]}}},
-                         executor.request)
+            'bool': {'filter': [{'ids': {'type': 'symbol', 'value': ['1', '2']}}, {'type': {'value': 'abc'}}]}}},
+            executor.request)
+
+    def test_like(self):
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE symbol LIKE 'AAP%'")
+        self.assertEqual({'query': {'wildcard': {u'symbol': 'AAP*'}}}, executor.request)
+        executor = es_query.create_executor("SELECT * FROM symbol WHERE symbol LIKE %(param1)s")
+        self.assertEqual(
+            {'query': {'wildcard': {u'symbol': '%(param1)s'}}, '_parameters_': {
+                u'param1': {'path': ['query', 'wildcard', u'symbol'], 'field_hint': u'symbol'}}},
+            executor.request)

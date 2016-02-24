@@ -111,10 +111,12 @@ def create_comparision_filter(comparison, tables=None):
         simple_types = (ttypes.Number.Integer, ttypes.Number.Float)
         if left_operand.is_field() and right_operand_as_value is not None:
             operator_as_str = {'>': 'gt', '>=': 'gte', '<': 'lt', '<=': 'lte'}[operator]
+            add_field_hint_to_parameter(right_operand_as_value, left_operand.as_field_name())
             return {
                 'range': {left_operand.as_field_name(): {operator_as_str: right_operand_as_value}}}
         elif right_operand.is_field() and left_operand_as_value is not None:
             operator_as_str = {'>': 'lte', '>=': 'lt', '<': 'gte', '<=': 'gt'}[operator]
+            add_field_hint_to_parameter(left_operand_as_value, right_operand.as_field_name())
             return {
                 'range': {right_operand.as_field_name(): {operator_as_str: left_operand_as_value}}}
         else:
@@ -139,21 +141,32 @@ def create_comparision_filter(comparison, tables=None):
         elif '_id' == field:
             return {'ids': {'value': [right_operand_as_value]}}
         else:
+            add_field_hint_to_parameter(right_operand_as_value, field)
             return {'term': {field: right_operand_as_value}}
     elif operator.upper() in ('LIKE', 'ILIKE'):
-        right_operand = eval(right_operand.value)
-        return {'wildcard': {left_operand.as_field_name(): right_operand.replace('%', '*').replace('_', '?')}}
+        right_operand = eval_value(right_operand)
+        field = left_operand.as_field_name()
+        if isinstance(right_operand, SqlParameter):
+            add_field_hint_to_parameter(right_operand, field)
+            return {'wildcard': {field: right_operand}}
+        else:
+            return {'wildcard': {field: right_operand.replace('%', '*').replace('_', '?')}}
     elif operator in ('!=', '<>'):
-        right_operand = eval(right_operand.value)
+        if right_operand.is_field():
+            left_operand, right_operand = right_operand, left_operand
+        right_operand = eval_value(right_operand)
+        add_field_hint_to_parameter(right_operand, left_operand.as_field_name())
         return {'bool': {'must_not': {'term': {left_operand.as_field_name(): right_operand}}}}
     elif 'IN' == operator.upper():
-        values = eval(right_operand.value)
-        if not isinstance(values, tuple):
-            values = (values,)
-        values = list(values)
+        values = eval_value(right_operand)
+        if not isinstance(values, SqlParameter):
+            if not isinstance(values, tuple):
+                values = (values,)
+            values = list(values)
         if '_id' == left_operand.as_field_name():
             return {'ids': {'value': values}}
         else:
+            add_field_hint_to_parameter(values, left_operand.as_field_name())
             return {'terms': {left_operand.as_field_name(): values}}
     elif re.match('IS\s+NOT', operator.upper()):
         if 'NULL' != right_operand.value.upper():
@@ -196,8 +209,15 @@ class FieldRef(object):
         return repr(self)
 
 
+def add_field_hint_to_parameter(parameter, field):
+    if isinstance(parameter, SqlParameter):
+        parameter.field_hint = field
+
+
 def eval_value(token):
     val = str(token)
+    if token.ttype == ttypes.Name.Placeholder:
+        return SqlParameter(token.value[2:-2])
     try:
         val = eval(val, {}, datetime_evaluator.datetime_functions())
         if isinstance(val, datetime.datetime):
@@ -205,3 +225,18 @@ def eval_value(token):
         return val
     except:
         return None
+
+
+class SqlParameter(object):
+    def __init__(self, parameter_name):
+        self.parameter_name = parameter_name
+        self.field_hint = None
+
+    def __repr__(self):
+        return ''.join(['%(', self.parameter_name, ')s'])
+
+    def __unicode__(self):
+        return repr(self)
+
+    def __str__(self):
+        return repr(self)

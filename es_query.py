@@ -13,6 +13,7 @@ import functools
 from executors import SelectFromLeafExecutor
 from executors import SelectInsideBranchExecutor
 from executors import SelectInsideLeafExecutor
+from executors import SqlParameter
 from sqlparse.sql_select import SqlSelect
 
 DEBUG = False
@@ -91,6 +92,7 @@ def create_executor(sql_selects, joinable_results=None):
     if not root_executor:
         raise Exception('sql not found in %s' % sql_selects)
     root_executor[1].build_request()
+    update_placeholder(root_executor[1].request, root_executor[1].request)
     return root_executor[1]
 
 
@@ -114,6 +116,27 @@ def search_es(index, request, search_url='_search'):
         print('=====')
         print(json.dumps(response, indent=2))
     return response
+
+def update_placeholder(request, obj, path=None):
+    path = path or []
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            obj[k] = update_placeholder(request, v, path+[k])
+        return obj
+    elif isinstance(obj, (tuple, list)):
+        for i, e in enumerate(list(obj)):
+            obj[i] = update_placeholder(request, e, path+[i])
+        return obj
+    elif isinstance(obj, SqlParameter):
+        request['_parameters_'] = request.get('_parameters_', {})
+        request['_parameters_'][obj.parameter_name] = {
+            'path': path
+        }
+        if obj.field_hint:
+            request['_parameters_'][obj.parameter_name]['field_hint'] = obj.field_hint
+        return str(obj)
+    else:
+        return obj
 
 
 if __name__ == "__main__":
