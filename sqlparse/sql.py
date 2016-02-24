@@ -4,6 +4,7 @@
 
 import re
 import sys
+import json
 
 from sqlparse import tokens as T
 from sqlparse.compat import string_types, u
@@ -735,6 +736,27 @@ class Function(TokenList):
     __slots__ = ('value', 'ttype', 'tokens')
 
     def get_parameters(self):
+        params = []
+        found_named_parameter = False
+        named_params = {}
+        for param in self._get_parameters():
+            if isinstance(param, Comparison) and param.left.is_field() and param.operator == '=':
+                found_named_parameter = True
+            else:
+                if found_named_parameter:
+                    raise Exception('named param k=v must be together')
+            if found_named_parameter:
+                val = eval(param.right.value)
+                if isinstance(val, basestring) and val.startswith('{') and val.endswith('}'):
+                    val = json.loads(val)
+                named_params[param.left.as_field_name()] = val
+            else:
+                params.append(param)
+        if found_named_parameter:
+            params.append(Token(T.String.Single, "'%s'" % json.dumps(named_params)))
+        return params
+
+    def _get_parameters(self):
         """Return a list of parameters."""
         parenthesis = self.tokens[-1]
         for t in parenthesis.tokens:

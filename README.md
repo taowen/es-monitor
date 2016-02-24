@@ -980,6 +980,10 @@ TODO
 ```
 SELECT moving_avg(the_sum, '{"model":"holt","window":5,"gap_policy":"insert_zero","settings":{"alpha":0.8}}')
 ```
+Can also be
+```
+SELECT moving_avg(the_sum, model='holt', window=5, gap_policy='insert_zero', settings='{"alpha":0.8}')
+```
 
 ## Cumulative Sum Aggregation
 
