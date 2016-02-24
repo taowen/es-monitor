@@ -54,3 +54,15 @@ class SelectInsideLeafMetricTest(unittest.TestCase):
         self.assertEqual(
             {'aggs': {'COUNT(DISTINCT a.b)': {'cardinality': {'field': u'a.b'}}}, 'size': 0},
             executor.request)
+
+    def test_sum_of_squares(self):
+        executor = es_query.create_executor("SELECT sum_of_squares(a) FROM symbol")
+        self.assertEqual(
+            {'aggs': {u'a_extended_stats': {'extended_stats': {'field': u'a'}}}, 'size': 0},
+            executor.request)
+
+    def test_sum_of_squares_with_std_deviation(self):
+        executor = es_query.create_executor("SELECT sum_of_squares(a), std_deviation(a) FROM symbol")
+        self.assertEqual(
+            {'aggs': {u'a_extended_stats': {'extended_stats': {'field': u'a'}}}, 'size': 0},
+            executor.request)

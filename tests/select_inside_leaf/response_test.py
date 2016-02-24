@@ -160,3 +160,39 @@ class SelectInsideLeafResponseTest(unittest.TestCase):
              {u'sector': 'n/a', 'max(market_cap)': 971774087.0, u'exchange': 'nyse mkt'},
              {u'sector': 'Basic Industries', 'max(market_cap)': 424184478.0, u'exchange': 'nyse mkt'}],
             rows)
+
+    def test_sum_of_squares(self):
+        executor = es_query.create_executor("SELECT sum_of_squares(last_sale), std_deviation(last_sale) FROM symbol")
+        rows = executor.select_response({
+            "hits": {
+                "hits": [],
+                "total": 6714,
+                "max_score": 0.0
+            },
+            "_shards": {
+                "successful": 3,
+                "failed": 0,
+                "total": 3
+            },
+            "took": 5,
+            "aggregations": {
+                "last_sale_extended_stats": {
+                    "count": 6634,
+                    "min": 0.0,
+                    "sum_of_squares": 320576400178.0,
+                    "max": 269500.0,
+                    "sum": 17407390.0,
+                    "std_deviation": 6437.239059099383,
+                    "std_deviation_bounds": {
+                        "upper": 15498.444051270819,
+                        "lower": -10250.512185126712
+                    },
+                    "variance": 41438046.703994706,
+                    "avg": 2623.965933072053
+                }
+            },
+            "timed_out": False
+        })
+        self.assertEqual([
+            {'sum_of_squares(last_sale)': 320576400178.0, 'std_deviation(last_sale)': 6437.239059099383}],
+            rows)

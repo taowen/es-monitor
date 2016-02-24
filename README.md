@@ -474,7 +474,41 @@ TODO: Precision control, script, missing
 
 ## Extended Stats Aggregation
 
-TODO
+```
+{
+    "aggs" : {
+        "grades_stats" : { "extended_stats" : { "field" : "grade" } }
+    }
+}
+```
+will return
+```
+{
+    "grade_stats": {
+       "count": 9,
+       "min": 72,
+       "max": 99,
+       "avg": 86,
+       "sum": 774,
+       "sum_of_squares": 67028,
+       "variance": 51.55555555555556,
+       "std_deviation": 7.180219742846005,
+       "std_deviation_bounds": {
+        "upper": 100.36043948569201,
+        "lower": 71.63956051430799
+       }
+    }
+}
+```
+```
+SELECT SUM_OF_SQUARES(grade)
+SELECT VARIANCE(grade)
+SELECT STD_DEVIATION(grade)
+SELECT STD_DEVIATION_UPPER_BOUND(grade)
+SELECT STD_DEVIATION_LOWER_BOUND(grade)
+```
+
+TODO: script, missing
 
 ## Geo Bounds Aggregation
 
@@ -523,10 +557,6 @@ TODO
 TODO
 
 ## Scripted Metric Aggregation
-
-TODO
-
-## Stats Aggregation
 
 TODO
 
@@ -747,6 +777,7 @@ TODO
 ## Terms Aggregation
 
 TODO
+TODO: order by extended stats
 
 # Pipeline Aggregations
 
