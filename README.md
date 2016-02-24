@@ -1059,4 +1059,32 @@ TODO: gap_policy
 
 ## Serial Differencing Aggregation
 
-TODO
+```
+{
+   "aggs": {
+      "my_date_histo": {
+         "date_histogram": {
+            "field": "timestamp",
+            "interval": "day"
+         },
+         "aggs": {
+            "the_sum": {
+               "sum": {
+                  "field": "lemmings"
+               }
+            },
+            "thirtieth_difference": {
+               "serial_diff": {
+                  "buckets_path": "the_sum",
+                  "lag" : 30
+               }
+            }
+         }
+      }
+   }
+}
+```
+```
+SELECT SUM(lemmings) AS the_sum, SERIAL_DIFF(the_sum, lag=30) AS thirtieth_difference FROM xxx
+    GROUP BY DATE_TRUNC('day', "timestamp") AS my_date_histo
+```

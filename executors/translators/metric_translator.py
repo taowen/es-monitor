@@ -63,19 +63,20 @@ def translate_metric(buckets_names, sql_function, projection_name):
             raise Exception('field not found: %s' % field_name)
         metric_type = {
             'CSUM': 'cumulative_sum',
+            'CUMULATIVE_SUM': 'cumulative_sum',
             'DERIVATIVE': 'derivative'
         }[sql_function_name]
         request = {metric_type: {'buckets_path': buckets_path}}
         return request, selector
-    elif sql_function_name == 'MOVING_AVG':
+    elif sql_function_name in ('MOVING_AVG', 'SERIAL_DIFF'):
         selector = lambda bucket: bucket[projection_name]['value'] if projection_name in bucket else None
         field_name = params[0].as_field_name()
         buckets_path = buckets_names.get(field_name)
         if not buckets_path:
             raise Exception('field not found: %s' % field_name)
-        request = {'moving_avg': {'buckets_path': buckets_path}}
+        request = {sql_function_name.lower(): {'buckets_path': buckets_path}}
         if len(params) > 1:
-            request['moving_avg'].update(json.loads(params[1].value[1:-1]))
+            request[sql_function_name.lower()].update(json.loads(params[1].value[1:-1]))
         return request, selector
     else:
         raise Exception('unsupported function: %s' % repr(sql_function))

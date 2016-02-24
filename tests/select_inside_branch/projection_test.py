@@ -55,10 +55,10 @@ class SelectInsideProjectionTest(unittest.TestCase):
             "WHERE symbol='AAPL' GROUP BY date_trunc('year', \"date\") AS year"])
         self.assertEqual(
             {'query': {'term': {u'symbol': 'AAPL'}}, 'aggs': {
-            u'year': {'date_histogram': {'field': u'date', 'interval': 'year', 'time_zone': '+08:00'},
-                      'aggs': {u'max_adj_close': {u'max': {'field': u'adj_close'}},
-                               'ma': {
-                               'moving_avg': {'buckets_path': u'max_adj_close', 'window': 5}}}}}, 'size': 0},
+                u'year': {'date_histogram': {'field': u'date', 'interval': 'year', 'time_zone': '+08:00'},
+                          'aggs': {u'max_adj_close': {u'max': {'field': u'adj_close'}},
+                                   'ma': {
+                                       'moving_avg': {'buckets_path': u'max_adj_close', 'window': 5}}}}}, 'size': 0},
             executor.request)
 
     def test_moving_average_with_named_params(self):
@@ -67,10 +67,23 @@ class SelectInsideProjectionTest(unittest.TestCase):
             "WHERE symbol='AAPL' GROUP BY date_trunc('year', \"date\") AS year"])
         self.assertEqual(
             {'query': {'term': {u'symbol': 'AAPL'}}, 'aggs': {
-            u'year': {'date_histogram': {'field': u'date', 'interval': 'year', 'time_zone': '+08:00'},
-                      'aggs': {u'max_adj_close': {u'max': {'field': u'adj_close'}},
-                               'ma': {
-                               'moving_avg': {'buckets_path': u'max_adj_close', 'window': 5, 'settings': {'alpha': 0.8}}}}}}, 'size': 0},
+                u'year': {'date_histogram': {'field': u'date', 'interval': 'year', 'time_zone': '+08:00'},
+                          'aggs': {u'max_adj_close': {u'max': {'field': u'adj_close'}},
+                                   'ma': {
+                                       'moving_avg': {'buckets_path': u'max_adj_close', 'window': 5,
+                                                      'settings': {'alpha': 0.8}}}}}}, 'size': 0},
+            executor.request)
+
+    def test_serial_diff(self):
+        executor = es_query.create_executor([
+            "SELECT year, MAX(adj_close) AS max_adj_close, SERIAL_DIFF(max_adj_close, lag=7) AS ma FROM quote "
+            "WHERE symbol='AAPL' GROUP BY date_trunc('year', \"date\") AS year"])
+        self.assertEqual(
+            {'query': {'term': {u'symbol': 'AAPL'}}, 'aggs': {
+                u'year': {'date_histogram': {'field': u'date', 'interval': 'year', 'time_zone': '+08:00'},
+                          'aggs': {u'max_adj_close': {u'max': {'field': u'adj_close'}},
+                                   u'ma': {u'serial_diff': {'buckets_path': u'max_adj_close', u'lag': 7}}}}},
+             'size': 0},
             executor.request)
 
     def test_drivative(self):
