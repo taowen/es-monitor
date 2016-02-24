@@ -739,7 +739,7 @@ class Function(TokenList):
         parenthesis = self.tokens[-1]
         for t in parenthesis.tokens:
             if isinstance(t, IdentifierList):
-                return t.get_identifiers()
+                return list(t.get_identifiers())
         return [t for t in parenthesis.tokens[1:-1] if t.ttype not in (T.Punctuation, T.Whitespace, T.Newline)]
 
     def get_function_name(self):

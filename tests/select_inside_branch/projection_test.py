@@ -37,14 +37,38 @@ class SelectInsideProjectionTest(unittest.TestCase):
              'size': 0},
             executor.request)
 
+    def test_moving_average(self):
+        executor = es_query.create_executor([
+            "SELECT year, MAX(adj_close) AS max_adj_close, MOVING_Avg(max_adj_close) FROM quote "
+            "WHERE symbol='AAPL' GROUP BY date_trunc('year', \"date\") AS year"])
+        self.assertEqual(
+            {'query': {'term': {u'symbol': 'AAPL'}}, 'aggs': {
+                u'year': {'date_histogram': {'field': u'date', 'interval': 'year', 'time_zone': '+08:00'},
+                          'aggs': {u'max_adj_close': {u'max': {'field': u'adj_close'}},
+                                   'MOVING_Avg(max_adj_close)': {'moving_avg': {'buckets_path': u'max_adj_close'}}}}},
+             'size': 0},
+            executor.request)
+
+    def test_moving_average_with_params(self):
+        executor = es_query.create_executor([
+            "SELECT year, MAX(adj_close) AS max_adj_close, MOVING_Avg(max_adj_close, '{\"window\":5}') AS ma FROM quote "
+            "WHERE symbol='AAPL' GROUP BY date_trunc('year', \"date\") AS year"])
+        self.assertEqual(
+            {'query': {'term': {u'symbol': 'AAPL'}}, 'aggs': {
+            u'year': {'date_histogram': {'field': u'date', 'interval': 'year', 'time_zone': '+08:00'},
+                      'aggs': {u'max_adj_close': {u'max': {'field': u'adj_close'}},
+                               'ma': {
+                               'moving_avg': {'buckets_path': u'max_adj_close', 'window': 5}}}}}, 'size': 0},
+            executor.request)
+
     def test_drivative(self):
         executor = es_query.create_executor([
             "SELECT year, MAX(adj_close) AS max_adj_close, DERIVATIVE(max_adj_close) FROM quote "
             "WHERE symbol='AAPL' GROUP BY date_trunc('year', \"date\") AS year"])
         self.assertEqual(
             {'query': {'term': {u'symbol': 'AAPL'}}, 'aggs': {
-            u'year': {'date_histogram': {'field': u'date', 'interval': 'year', 'time_zone': '+08:00'},
-                      'aggs': {u'max_adj_close': {u'max': {'field': u'adj_close'}},
-                               'DERIVATIVE(max_adj_close)': {'derivative': {'buckets_path': u'max_adj_close'}}}}},
+                u'year': {'date_histogram': {'field': u'date', 'interval': 'year', 'time_zone': '+08:00'},
+                          'aggs': {u'max_adj_close': {u'max': {'field': u'adj_close'}},
+                                   'DERIVATIVE(max_adj_close)': {'derivative': {'buckets_path': u'max_adj_close'}}}}},
              'size': 0},
             executor.request)

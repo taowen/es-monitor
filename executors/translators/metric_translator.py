@@ -1,5 +1,6 @@
 from sqlparse import tokens as ttypes
 from sqlparse import sql as stypes
+import json
 
 
 def translate_metrics(sql_select):
@@ -25,8 +26,9 @@ def translate_metric(buckets_names, sql_function, projection_name):
     if not isinstance(sql_function, stypes.Function):
         raise Exception('unexpected: %s' % repr(sql_function))
     sql_function_name = sql_function.tokens[0].value.upper()
+    params = sql_function.get_parameters()
     if 'COUNT' == sql_function_name:
-        params = list(sql_function.get_parameters())
+        params = list(params)
         if len(params) == 1 and ttypes.Wildcard == params[0].ttype:
             selector = lambda bucket: bucket['doc_count']
             return None, selector
@@ -43,10 +45,10 @@ def translate_metric(buckets_names, sql_function, projection_name):
                 request = {'value_count': {'field': params[0].as_field_name()}}
                 return request, selector
     elif sql_function_name in ('MAX', 'MIN', 'AVG', 'SUM'):
-        if len(sql_function.get_parameters()) != 1:
+        if len(params) != 1:
             raise Exception('unexpected: %s' % repr(sql_function))
         selector = lambda bucket: bucket[projection_name]['value']
-        field_name = sql_function.get_parameters()[0].as_field_name()
+        field_name = params[0].as_field_name()
         buckets_path = buckets_names.get(field_name)
         if buckets_path:
             request = {'%s_bucket' % sql_function_name.lower(): {'buckets_path': buckets_path}}
@@ -55,7 +57,7 @@ def translate_metric(buckets_names, sql_function, projection_name):
         return request, selector
     elif sql_function_name in ('CSUM', 'DERIVATIVE'):
         selector = lambda bucket: bucket[projection_name]['value'] if projection_name in bucket else None
-        field_name = sql_function.get_parameters()[0].as_field_name()
+        field_name = params[0].as_field_name()
         buckets_path = buckets_names.get(field_name)
         if not buckets_path:
             raise Exception('field not found: %s' % field_name)
@@ -64,6 +66,16 @@ def translate_metric(buckets_names, sql_function, projection_name):
             'DERIVATIVE': 'derivative'
         }[sql_function_name]
         request = {metric_type: {'buckets_path': buckets_path}}
+        return request, selector
+    elif sql_function_name == 'MOVING_AVG':
+        selector = lambda bucket: bucket[projection_name]['value'] if projection_name in bucket else None
+        field_name = params[0].as_field_name()
+        buckets_path = buckets_names.get(field_name)
+        if not buckets_path:
+            raise Exception('field not found: %s' % field_name)
+        request = {'moving_avg': {'buckets_path': buckets_path}}
+        if len(params) > 1:
+            request['moving_avg'].update(json.loads(params[1].value[1:-1]))
         return request, selector
     else:
         raise Exception('unsupported function: %s' % repr(sql_function))

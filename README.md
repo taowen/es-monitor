@@ -964,7 +964,22 @@ TODO
 
 ## Moving Average Aggregation
 
-TODO
+```
+{
+    "moving_avg": {
+        "buckets_path": "the_sum",
+        "model": "holt",
+        "window": 5,
+        "gap_policy": "insert_zero",
+        "settings": {
+            "alpha": 0.8
+        }
+    }
+}
+```
+```
+SELECT moving_avg(the_sum, '{"model":"holt","window":5,"gap_policy":"insert_zero","settings":{"alpha":0.8}}')
+```
 
 ## Cumulative Sum Aggregation
 
