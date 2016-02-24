@@ -20,7 +20,7 @@ DEBUG = False
 ES_HOSTS = None
 
 
-def execute_sql(es_hosts, sql):
+def execute_sql(es_hosts, sql, arguments=None):
     global ES_HOSTS
 
     ES_HOSTS = es_hosts
@@ -38,21 +38,21 @@ def execute_sql(es_hosts, sql):
             is_remove = re.match(r'^REMOVE\s+RESULT\s+(.*)$', sql_select, re.IGNORECASE | re.DOTALL)
             if is_save:
                 result_name = is_save.group(1)
-                result_map[result_name] = create_executor(current_sql_selects, result_map).execute()
+                result_map[result_name] = create_executor(current_sql_selects, result_map, arguments).execute()
                 current_sql_selects = []
             elif is_remove:
                 if current_sql_selects:
-                    result_map['result'] = create_executor(current_sql_selects, result_map).execute()
+                    result_map['result'] = create_executor(current_sql_selects, result_map, arguments).execute()
                     current_sql_selects = []
                 result_map.pop(is_remove.group(1))
             else:
                 exec sql_select in {'result_map': result_map}, {}
     if current_sql_selects:
-        result_map['result'] = create_executor(current_sql_selects, result_map).execute()
+        result_map['result'] = create_executor(current_sql_selects, result_map, arguments).execute()
     return result_map
 
 
-def create_executor(sql_selects, joinable_results=None):
+def create_executor(sql_selects, joinable_results=None, arguments=None):
     executor_map = {}
     if not isinstance(sql_selects, list):
         sql_selects = [sql_selects]
@@ -79,7 +79,9 @@ def create_executor(sql_selects, joinable_results=None):
         else:
             _search_es = search_es
             if sql_select.join_table in executor_map:
-                _search_es = functools.partial(search_es, search_url='_coordinate_search')
+                _search_es = functools.partial(search_es, search_url='_coordinate_search', arguments=arguments)
+            else:
+                _search_es = functools.partial(search_es, arguments=arguments)
             if sql_select.is_select_inside:
                 executor = SelectInsideLeafExecutor(sql_select, _search_es)
             else:
@@ -96,7 +98,21 @@ def create_executor(sql_selects, joinable_results=None):
     return root_executor[1]
 
 
-def search_es(index, request, search_url='_search'):
+def search_es(index, request, search_url='_search', arguments=None):
+    arguments = arguments or {}
+    parameters = request.pop('_parameters_', {})
+    if parameters:
+        pset = set(parameters.keys())
+        aset = set(arguments.keys())
+        if (pset - aset):
+            raise Exception('not all parameters have been specified: %s' % (pset-aset))
+        if (aset - pset):
+            raise Exception('too many arguments specified: %s' % (aset - pset))
+    for param_name, param in parameters.iteritems():
+        level = request
+        for p in param['path'][:-1]:
+            level = level[p]
+        level[param['path'][-1]] = arguments[param_name]
     url = ES_HOSTS + '/%s/%s' % (index, search_url)
     if DEBUG:
         print('===== %s' % url)

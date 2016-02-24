@@ -60,11 +60,30 @@ def search():
         sql = flask.request.args.get('q')
     else:
         sql = flask.request.get_data(parse_form_data=False)
-    es_hosts = flask.request.args.get('by')
+    es_hosts = flask.request.args.get('elasticsearch')
     try:
         resp = {
             'error': None,
             'data': es_query.execute_sql(es_hosts, sql)
+        }
+        return json.dumps(resp, indent=2)
+    except:
+        etype, value, tb = sys.exc_info()
+        resp = {
+            'traceback': traceback.format_exception(etype, value, tb),
+            'error': str(value),
+            'data': None
+        }
+        return json.dumps(resp, indent=2)
+
+
+@app.route('/search_with_arguments', methods=['POST'])
+def search_with_arguments():
+    req = json.loads(flask.request.get_data(parse_form_data=False))
+    try:
+        resp = {
+            'error': None,
+            'data': es_query.execute_sql(req['elasticsearch'], req['sql'], req['arguments'])
         }
         return json.dumps(resp, indent=2)
     except:

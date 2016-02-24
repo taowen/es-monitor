@@ -64,12 +64,34 @@ EOF
   "error": null
 }
 ```
+
 用SQL直接查询 Elasticsearch 取得结果
 ```
-$ cat << EOF | curl -X POST -d @- http://127.0.0.1:8000/search?by=http://127.0.0.1:9200
+$ cat << EOF | curl -X POST -d @- http://127.0.0.1:8000/search?elasticsearch=http://127.0.0.1:9200
 SELECT COUNT(*) FROM quote WHERE symbol='AAPL'
 EOF
 
+{
+  "data": {
+    "result": [
+      {
+        "COUNT(*)": 8790
+      }
+    ]
+  },
+  "error": null
+}
+```
+
+带参数查询
+```
+$ cat << EOF | curl -X POST -d @- http://127.0.0.1:8000/search_with_arguments
+{
+    "elasticsearch":"http://127.0.0.1:9200",
+    "sql":"SELECT COUNT(*) FROM quote WHERE symbol=%(param1)s",
+    "arguments":{"param1":"AAPL"}
+}
+EOF
 {
   "data": {
     "result": [
