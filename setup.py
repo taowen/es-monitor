@@ -47,7 +47,11 @@ setup(
             "Programming Language :: Python :: Implementation :: PyPy",
         ],
         install_requires=install_requires,
-
+        entry_points={
+            'console_scripts': [
+                'es-sql = es_sql.__main__:main'
+            ]
+        },
         test_suite='es_sql.run_tests.run_all',
         tests_require=tests_require,
 )

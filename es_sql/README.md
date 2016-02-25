@@ -1,3 +1,27 @@
+# Installation
+
+pip install es-sql
+
+# Usage
+
+```
+import es_sql
+es_sql.execute_sql(
+    'http://127.0.0.1:9200',
+    'SELECT COUNT(*) FROM your_index WHERE field=%(param)s',
+    arguments={'param': 'value'})
+```
+
+arguments is optional if no %(param)s specified in the sql
+
+```es-sql``` command can also be used in commandline:
+
+```
+cat << EOF | es-sql http://127.0.0.1:9200
+    SELECT COUNT(*) FROM your_index
+EOF
+```
+
 # Syntax
 
 The goal is to be able to express all the necessary elasticsearch DSL
