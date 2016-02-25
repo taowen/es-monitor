@@ -4,13 +4,14 @@
 Report odin series using elasticsearch query
 
 """
-import es_query
-import sys
-import json
-import time
 import base64
-import urllib2
+import json
 import os
+import sys
+import time
+import urllib2
+
+from elasticsearch_sql import es_query
 
 
 def to_str(val):
