@@ -7,26 +7,22 @@ import traceback
 
 import flask
 
-import es_query
+from es_sql import es_query
 
 app_dir = os.path.dirname(__file__)
 app = flask.Flask(__name__, template_folder=app_dir)
 
-if not os.path.exists('log'):
-    os.mkdir('log')
-handler = RotatingFileHandler('log/explorer.log', maxBytes=10000, backupCount=1)
-handler.setLevel(logging.ERROR)
-app.logger.addHandler(handler)
-
+app.logger.addHandler(logging.StreamHandler())
+app.logger.setLevel(logging.INFO)
 
 @app.route('/')
 def explorer():
-    return flask.render_template('explorer.html')
+    return flask.render_template('index.html')
 
 
-@app.route('/res/<path:path>')
+@app.route('/static/<path:path>')
 def send_res(path):
-    return flask.send_from_directory(os.path.join(app_dir, 'res'), path)
+    return flask.send_from_directory(os.path.join(app_dir, 'static'), path)
 
 
 @app.route('/translate', methods=['GET', 'POST'])
@@ -47,6 +43,8 @@ def translate():
     except:
         etype, value, tb = sys.exc_info()
         resp = {
+            'request_args': flask.request.args,
+            'request_body': flask.request.get_data(parse_form_data=False),
             'traceback': traceback.format_exception(etype, value, tb),
             'error': str(value),
             'data': None
@@ -70,6 +68,8 @@ def search():
     except:
         etype, value, tb = sys.exc_info()
         resp = {
+            'request_args': flask.request.args,
+            'request_body': flask.request.get_data(parse_form_data=False),
             'traceback': traceback.format_exception(etype, value, tb),
             'error': str(value),
             'data': None
@@ -89,6 +89,8 @@ def search_with_arguments():
     except:
         etype, value, tb = sys.exc_info()
         resp = {
+            'request_args': flask.request.args,
+            'request_body': flask.request.get_data(parse_form_data=False),
             'traceback': traceback.format_exception(etype, value, tb),
             'error': str(value),
             'data': None

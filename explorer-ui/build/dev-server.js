@@ -1,4 +1,5 @@
 var express = require('express')
+var proxy = require('express-http-proxy')
 var webpack = require('webpack')
 var config = require('./webpack.dev.conf')
 
@@ -29,6 +30,12 @@ app.use(devMiddleware)
 // enable hot-reload and state-preserving
 // compilation error display
 app.use(hotMiddleware)
+
+app.use('/translate', proxy('127.0.0.1:8000', {
+  forwardPath: function(req, res) {
+    return '/translate';
+  }
+}));
 
 app.listen(8080, function (err) {
   if (err) {
