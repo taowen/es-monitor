@@ -4,3 +4,6 @@
 /sample/quote.zip
 /sample/githubarchive
 /log
+/build
+/dist
+/*.egg-info
