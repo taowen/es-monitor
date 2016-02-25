@@ -11,7 +11,7 @@ import sys
 import time
 import urllib2
 
-from elasticsearch_sql import es_query
+from es_sql import es_query
 
 
 def to_str(val):
