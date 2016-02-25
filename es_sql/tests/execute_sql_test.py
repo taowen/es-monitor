@@ -13,10 +13,10 @@ class TestExecuteSQL(unittest.TestCase):
         es_query.create_executor = self.old_create_executor
         super(TestExecuteSQL, self).tearDown()
 
-    def create_executor(self, sql_selects, joinable_results, arguments):
+    def create_executor(self, sql_selects, joinable_results):
         return self
 
-    def execute(self):
+    def execute(self, es_url, arguments):
         return [{'some_key': 'some_value'}]
 
     def test_no_save_as(self):

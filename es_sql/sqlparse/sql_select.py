@@ -1,6 +1,6 @@
 import datetime
 
-from es_sql import sqlparse # TODO: should not reference parent
+from es_sql import sqlparse  # TODO: should not reference parent
 from . import datetime_evaluator
 from . import sql as stypes
 from . import tokens as ttypes
@@ -30,6 +30,12 @@ class SqlSelect(object):
         if isinstance(self.from_table, basestring):
             if self.group_by or self.has_function_projection():
                 self.is_select_inside = True
+
+    def generate_url(self, es_url):
+        if self.join_table in self.joinable_queries:
+            return '%s/%s/_coordinate_search' % (es_url, self.from_indices)
+        else:
+            return '%s/%s/_search' % (es_url, self.from_indices)
 
     @classmethod
     def parse(cls, sql_select, joinable_results=None, joinable_queries=None):

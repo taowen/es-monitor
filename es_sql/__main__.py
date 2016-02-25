@@ -1,9 +1,10 @@
 import json
 import sys
+import logging
 
 from . import es_query
 
-es_query.DEBUG = True
+logging.basicConfig(level=logging.DEBUG)
 sql = sys.stdin.read()
 result_map = es_query.execute_sql(sys.argv[1], sql)
 print('=====')

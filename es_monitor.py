@@ -27,7 +27,16 @@ def query_datapoints(config):
     sql = ''.join(lines[1:])
     datapoints = []
     ts = int(time.time())
-    result_map = es_query.execute_sql(es_hosts, sql)
+    try:
+        result_map = es_query.execute_sql(es_hosts, sql)
+    except urllib2.HTTPError as e:
+        sys.stderr.write(e.read())
+        return
+    except:
+        import traceback
+
+        sys.stderr.write(traceback.format_exc())
+        return
     for metric_name, rows in result_map.iteritems():
         for row in rows or []:
             datapoint = {'value': row.pop('value', 0)}

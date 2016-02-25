@@ -5,6 +5,7 @@ from .translators import group_by_translator
 from .translators import join_translator
 from .translators import metric_translator
 from .translators import sort_translator
+from .select_from_leaf_executor import search_es
 
 
 class SelectInsideExecutor(object):
@@ -184,12 +185,12 @@ class SelectInsideBranchExecutor(SelectInsideExecutor):
 
 
 class SelectInsideLeafExecutor(SelectInsideExecutor):
-    def __init__(self, sql_select, search_es):
+    def __init__(self, sql_select):
         super(SelectInsideLeafExecutor, self).__init__(sql_select)
-        self.search_es = search_es
 
-    def execute(self):
-        response = self.search_es(self.sql_select.from_indices, self.request)
+    def execute(self, es_url, arguments=None):
+        url = self.sql_select.generate_url(es_url)
+        response = search_es(url, self.request, arguments)
         return self.select_response(response)
 
     def select_response(self, response):

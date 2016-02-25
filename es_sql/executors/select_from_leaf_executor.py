@@ -1,4 +1,8 @@
 import functools
+import logging
+import time
+import urllib2
+import json
 
 from es_sql.sqlparse import sql as stypes
 from es_sql.sqlparse import tokens as ttypes
@@ -6,27 +10,28 @@ from .translators import filter_translator
 from .translators import join_translator
 from .translators import sort_translator
 
+LOGGER = logging.getLogger(__name__)
 
 class SelectFromLeafExecutor(object):
-    def __init__(self, sql_select, search_es):
+    def __init__(self, sql_select):
         self.sql_select = sql_select
         self.request = self.build_request()
-        self.search_es = search_es
         self.selectors = []
         for projection_name, projection in self.sql_select.projections.iteritems():
             if projection.ttype == ttypes.Wildcard:
                 self.selectors.append(select_wildcard)
             elif projection.ttype == ttypes.Name:
                 self.selectors.append(functools.partial(
-                    select_name, projection_name=projection_name, projection=projection))
+                        select_name, projection_name=projection_name, projection=projection))
             else:
                 python_script = translate_projection_to_python(projection)
                 python_code = compile(python_script, '', 'eval')
                 self.selectors.append(functools.partial(
-                    select_by_python_code, projection_name=projection_name, python_code=python_code))
+                        select_by_python_code, projection_name=projection_name, python_code=python_code))
 
-    def execute(self):
-        response = self.search_es(self.sql_select.from_indices, self.request)
+    def execute(self, es_url, arguments=None):
+        url = self.sql_select.generate_url(es_url)
+        response = search_es(url, self.request, arguments)
         return self.select_response(response)
 
     def build_request(self):
@@ -56,6 +61,31 @@ class SelectFromLeafExecutor(object):
                 selector(input, row)
             rows.append(row)
         return rows
+
+
+def search_es(url, request, arguments=None):
+    arguments = arguments or {}
+    parameters = request.pop('_parameters_', {})
+    if parameters:
+        pset = set(parameters.keys())
+        aset = set(arguments.keys())
+        if (pset - aset):
+            raise Exception('not all parameters have been specified: %s' % (pset - aset))
+        if (aset - pset):
+            raise Exception('too many arguments specified: %s' % (aset - pset))
+    for param_name, param in parameters.iteritems():
+        level = request
+        for p in param['path'][:-1]:
+            level = level[p]
+        level[param['path'][-1]] = arguments[param_name]
+    request_id = time.time()
+    if LOGGER.isEnabledFor(logging.DEBUG):
+        LOGGER.debug('[%s] === send request to: %s\n%s' % (request_id, url, json.dumps(request, indent=2)))
+    resp = urllib2.urlopen(url, json.dumps(request)).read()
+    response = json.loads(resp)
+    if LOGGER.isEnabledFor(logging.DEBUG):
+        LOGGER.debug('[%s] === received response:\n%s' % (request_id, json.dumps(response, indent=2)))
+    return response
 
 
 def select_wildcard(input, row):
