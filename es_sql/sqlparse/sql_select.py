@@ -13,6 +13,7 @@ class SqlSelect(object):
         self.from_table = None
         self.from_indices = None
         self.projections = {}
+        self.projection_mapping = {}
         self.group_by = OrderedDict()
         self.order_by = []
         self.limit = None

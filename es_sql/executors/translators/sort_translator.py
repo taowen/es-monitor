@@ -18,7 +18,9 @@ def translate_sort(sql_select):
             sort.append({'_term': asc_or_desc})
         else:
             buckets_path = sql_select.buckets_names.get(field_name)
-            if buckets_path:
+            if field_name in sql_select.projection_mapping:
+                sort.append({sql_select.projection_mapping[field_name]: asc_or_desc})
+            elif buckets_path:
                 sort.append({buckets_path: asc_or_desc})
             else:
                 sort.append({field_name: asc_or_desc})

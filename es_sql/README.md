@@ -716,8 +716,94 @@ TODO
 
 ## Terms Aggregation
 
-TODO
-TODO: order by extended stats
+```
+{
+    "aggs" : {
+        "genders" : {
+            "terms" : { "field" : "gender" }
+        }
+    }
+}
+```
+```
+GROUOP BY gender AS genders
+```
+```
+{
+    "aggs" : {
+        "products" : {
+            "terms" : {
+                "field" : "product",
+                "size" : 5
+            }
+        }
+    }
+}
+```
+```
+GROUP BY product AS products LIMIT 5
+```
+```
+{
+    "aggs" : {
+        "genders" : {
+            "terms" : {
+                "field" : "gender",
+                "order" : { "_count" : "asc" }
+            }
+        }
+    }
+}
+```
+```
+SELECT COUNT(*) AS c FROM xxx
+    GROUP BY gender AS genders ORDER BY c
+```
+```
+{
+    "aggs" : {
+        "genders" : {
+            "terms" : {
+                "field" : "gender",
+                "order" : { "height_stats.std_deviation" : "desc" }
+            },
+            "aggs" : {
+                "height_stats" : { "extended_stats" : { "field" : "height" } }
+            }
+        }
+    }
+}
+```
+```
+SELECT STD_DEVIATION(height) AS s FROM xxx
+    GROUP BY gender AS genders ORDER BY s
+```
+```
+{
+    "aggs" : {
+        "countries" : {
+            "terms" : {
+                "field" : "address.country",
+                "order" : { "females>height_stats.avg" : "desc" }
+            },
+            "aggs" : {
+                "females" : {
+                    "filter" : { "term" : { "gender" :  "female" }},
+                    "aggs" : {
+                        "avg_height" : { "avg" : { "field" : "height" }}
+                    }
+                }
+            }
+        }
+    }
+}
+```
+```
+WITH SELECT * FROM xxx GROUP BY address.country AS countries ORDER BY female_avg_height AS all;
+SELECT AVG(height) AS female_avg_height FROM all WHERE gender='female'
+```
+
+TODO: document count error, min_doc_count, script, filtering, collect-to, missing
 
 # Pipeline Aggregations
 

@@ -17,8 +17,13 @@ def translate_metrics(sql_select):
                             % sql_select.group_by.keys())
         request, selector = translate_metric(sql_select.buckets_names, projection, projection_name)
         if request:
-            bucket_name = request.pop('_overridden_bucket_name_', None) or projection_name
-            metric_request[bucket_name] = request
+            projection_mapped_to = request.pop('_projection_mapped_to_', None)
+            if projection_mapped_to:
+                bucket_name = projection_mapped_to[0]
+                metric_request[bucket_name] = request
+                sql_select.projection_mapping[projection_name] = '.'.join(projection_mapped_to)
+            else:
+                metric_request[projection_name] = request
         if selector:
             metric_selector[projection_name] = selector
     return metric_request, metric_selector
@@ -117,10 +122,13 @@ def translate_extended_stats(buckets_names, sql_function, projection_name):
     field = params[0].as_field_name()
     overridden_bucket_name = '%s_extended_stats' % field
     if 'STD_DEVIATION_UPPER_BOUND' == sql_function_name:
+        _projection_mapped_to_ = (overridden_bucket_name, 'std_deviation_bounds.upper')
         selector = lambda bucket: bucket[overridden_bucket_name]['std_deviation_bounds']['upper']
     elif 'STD_DEVIATION_LOWER_BOUND' == sql_function_name:
+        _projection_mapped_to_ = (overridden_bucket_name, 'std_deviation_bounds.lower')
         selector = lambda bucket: bucket[overridden_bucket_name]['std_deviation_bounds']['lower']
     else:
+        _projection_mapped_to_ = (overridden_bucket_name, sql_function_name.lower())
         selector = lambda bucket: bucket[overridden_bucket_name][sql_function_name.lower()]
-    request = {'extended_stats': {'field': params[0].as_field_name()}, '_overridden_bucket_name_': overridden_bucket_name}
+    request = {'extended_stats': {'field': params[0].as_field_name()}, '_projection_mapped_to_': _projection_mapped_to_}
     return request, selector
