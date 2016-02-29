@@ -45,7 +45,7 @@ def query_datapoints(config):
                 for k, v in row.iteritems():
                     tags[to_str(k)] = to_str(v)
                 datapoint['tags'] = tags
-            datapoint['name'] = metric_name
+            datapoint['name'] = datapoint['tags'].pop('_metric_name', None) or metric_name
             datapoint['timestamp'] = ts
             datapoints.append(datapoint)
     return datapoints
