@@ -31,7 +31,11 @@ class SelectFromLeafExecutor(object):
 
     def execute(self, es_url, arguments=None):
         url = self.sql_select.generate_url(es_url)
-        response = search_es(url, self.request, arguments)
+        if self.sql_select.from_indices.startswith('_cluster_health'):
+            response = json.loads(urllib2.urlopen('%s/_cluster/health' % es_url).read())
+            response = {'hits': {'hits': [{'_source': response}]}}
+        else:
+            response = search_es(url, self.request, arguments)
         return self.select_response(response)
 
     def build_request(self):
@@ -90,9 +94,10 @@ def search_es(url, request, arguments=None):
 
 def select_wildcard(input, row):
     row.update(input['_source'])
-    row['_id'] = input['_id']
-    row['_type'] = input['_type']
-    row['_index'] = input['_index']
+    if '_id' in input:
+        row['_id'] = input['_id']
+        row['_type'] = input['_type']
+        row['_index'] = input['_index']
 
 
 def select_name(input, row, projection_name, projection):
