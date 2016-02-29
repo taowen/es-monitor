@@ -91,19 +91,24 @@ def execute(es_url, sql_select):
             nodes.append({'_source': node})
         response = {'hits': {'hits': nodes}}
     elif sql_select.from_table.startswith('_indices_stats'):
+        _, _, target_index_name = sql_select.from_table.partition('.')
         response = json.loads(urllib2.urlopen('%s/_stats' % es_url).read())
         all_rows = []
-        rows = []
-        collect_stats_rows(rows, response.get('_shards', {}), ['indices', 'shards'])
-        all_rows.extend(rows)
-        rows = []
-        collect_stats_rows(rows, response.get('_all', {}), ['indices', 'all'])
-        all_rows.extend(rows)
-        for index_name, index_stats in response.get('indices', {}).iteritems():
+        if target_index_name:
+            for index_name, index_stats in response.get('indices', {}).iteritems():
+                if target_index_name != 'all' and target_index_name != index_name:
+                    continue
+                rows = []
+                collect_stats_rows(rows, index_stats, ['indices', 'per_index'])
+                for row in rows:
+                    row['_source']['index_name'] = index_name
+                all_rows.extend(rows)
+        else:
             rows = []
-            collect_stats_rows(rows, index_stats, ['indices', 'per_index'])
-            for row in rows:
-                row['_source']['index_name'] = index_name
+            collect_stats_rows(rows, response.get('_shards', {}), ['indices', 'shards'])
+            all_rows.extend(rows)
+            rows = []
+            collect_stats_rows(rows, response.get('_all', {}), ['indices', 'all'])
             all_rows.extend(rows)
         response = {'hits': {'hits': all_rows}}
     return response
