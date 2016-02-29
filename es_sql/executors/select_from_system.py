@@ -83,6 +83,13 @@ def execute(es_url, sql_select):
                 row['_source']['node_host'] = node_host
             all_rows.extend(rows)
         response = {'hits': {'hits': all_rows}}
+    elif sql_select.from_table.startswith('_nodes_info'):
+        response = json.loads(urllib2.urlopen('%s/_nodes' % es_url).read())
+        nodes = []
+        for node_id, node in response.get('nodes', {}).iteritems():
+            node['node_id'] = node_id
+            nodes.append({'_source': node})
+        response = {'hits': {'hits': nodes}}
     return response
 
 def collect_stats_rows(rows, response, path):
