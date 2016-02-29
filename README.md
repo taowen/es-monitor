@@ -25,6 +25,20 @@ SELECT count(*) AS value FROM gs_api_track
 SAVE RESULT AS gs_api_track.count;
 ```
 
+监控Elasticsearch集群常用SQL
+```
+SELECT * FROM _cluster_health
+SELECT * FROM _cluster_state
+SELECT * FROM _cluster_stats
+SELECT * FROM _cluster_pending_tasks
+SELECT * FROM _cluster_reroute
+SELECT * FROM _nodes_stats
+SELECT * FROM _nodes_info
+SELECT * FROM _indices_stats
+SELECT * FROM _indices_stats.all
+SELECT * FROM _indices_stats.[index_name]
+```
+
 # SQL 查询 Elasticsearch
 
 教程请阅读：https://segmentfault.com/a/1190000003502849
