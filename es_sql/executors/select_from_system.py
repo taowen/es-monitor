@@ -90,6 +90,22 @@ def execute(es_url, sql_select):
             node['node_id'] = node_id
             nodes.append({'_source': node})
         response = {'hits': {'hits': nodes}}
+    elif sql_select.from_table.startswith('_indices_stats'):
+        response = json.loads(urllib2.urlopen('%s/_stats' % es_url).read())
+        all_rows = []
+        rows = []
+        collect_stats_rows(rows, response.get('_shards', {}), ['indices', 'shards'])
+        all_rows.extend(rows)
+        rows = []
+        collect_stats_rows(rows, response.get('_all', {}), ['indices', 'all'])
+        all_rows.extend(rows)
+        for index_name, index_stats in response.get('indices', {}).iteritems():
+            rows = []
+            collect_stats_rows(rows, index_stats, ['indices', 'per_index'])
+            for row in rows:
+                row['_source']['index_name'] = index_name
+            all_rows.extend(rows)
+        response = {'hits': {'hits': all_rows}}
     return response
 
 def collect_stats_rows(rows, response, path):
