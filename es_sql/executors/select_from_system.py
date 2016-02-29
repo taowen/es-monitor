@@ -53,17 +53,45 @@ def execute(es_url, sql_select):
     elif sql_select.from_table.startswith('_cluster_stats'):
         response = json.loads(urllib2.urlopen('%s/_cluster/stats' % es_url).read())
         rows = []
-        collect_cluster_stats_rows(rows, response, [])
+        collect_stats_rows(rows, response, ['cluster'])
         response = {'hits': {'hits': rows}}
+    elif sql_select.from_table.startswith('_cluster_pending_tasks'):
+        response = json.loads(urllib2.urlopen('%s/_cluster/pending_tasks' % es_url).read())
+        response = {'hits': {'hits': [{'_source': task} for task in response.get('tasks', [])]}}
+    elif sql_select.from_table.startswith('_cluster_reroute'):
+        response = json.loads(urllib2.urlopen('%s/_cluster/reroute' % es_url).read())
+        commands = []
+        for command in response.get('commands', []):
+            for command_name, command_args in command.iteritems():
+                command_args['command_name'] = command_name
+                commands.append({'_source': command_args})
+        response = {'hits': {'hits': commands}}
+    elif sql_select.from_table.startswith('_nodes_stats'):
+        response = json.loads(urllib2.urlopen('%s/_nodes/stats' % es_url).read())
+        all_rows = []
+        for node_id, node in response.get('nodes', {}).iteritems():
+            node_name = node.pop('name', None)
+            node_transport_address = node.pop('transport_address', None)
+            node_host = node.pop('host', None)
+            node.pop('ip', None)
+            rows = []
+            collect_stats_rows(rows, node, ['nodes'])
+            for row in rows:
+                row['_source']['node_id'] = node_id
+                row['_source']['node_name'] = node_name
+                row['_source']['node_transport_address'] = node_transport_address
+                row['_source']['node_host'] = node_host
+            all_rows.extend(rows)
+        response = {'hits': {'hits': all_rows}}
     return response
 
-def collect_cluster_stats_rows(rows, response, path):
+def collect_stats_rows(rows, response, path):
     if isinstance(response, dict):
         for k, v in response.iteritems():
-            collect_cluster_stats_rows(rows, v, path + [k])
+            collect_stats_rows(rows, v, path + [k])
     elif isinstance(response, (tuple, list)):
         for e in response:
-            collect_cluster_stats_rows(rows, e, path)
+            collect_stats_rows(rows, e, path)
     else:
         rows.append({'_source': {
             '_metric_name': '.'.join(path),

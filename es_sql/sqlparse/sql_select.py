@@ -92,7 +92,8 @@ class SqlSelect(object):
                 self.set_projections(token)
                 continue
             else:
-                raise Exception('unexpected: %s' % token)
+                print(tokens)
+                raise Exception('unexpected: %s' % repr(token))
 
     def set_projections(self, token):
         if token.ttype == ttypes.Punctuation:
