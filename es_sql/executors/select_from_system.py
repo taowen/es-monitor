@@ -111,6 +111,17 @@ def execute(es_url, sql_select):
             collect_stats_rows(rows, response.get('_all', {}), ['indices', 'all'])
             all_rows.extend(rows)
         response = {'hits': {'hits': all_rows}}
+    if sql_select.where and response['hits']['hits']:
+        columns = sorted(response['hits']['hits'][0]['_source'].keys())
+        import sqlite3
+        with sqlite3.connect(':memory:') as conn:
+            conn.execute('CREATE TABLE temp(%s)' % (', '.join(columns)))
+            rows = [[hit['_source'][column] for column in columns] for hit in response['hits']['hits']]
+            conn.executemany('INSERT INTO temp VALUES (%s)' % (', '.join(['?'] * len(columns))), rows)
+            filtered_rows = []
+            for row in conn.execute('SELECT * FROM temp %s' % sql_select.where):
+                filtered_rows.append({'_source': dict(zip(columns, row))})
+            return {'hits': {'hits': filtered_rows}}
     return response
 
 def collect_stats_rows(rows, response, path):
