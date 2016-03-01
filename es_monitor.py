@@ -10,6 +10,10 @@ import os
 import sys
 import time
 import urllib2
+import logging
+import logging.handlers
+
+LOGGER = logging.getLogger(__name__)
 
 from es_sql import es_query
 
@@ -30,28 +34,32 @@ def query_datapoints(config):
     try:
         result_map = es_query.execute_sql(es_hosts, sql)
     except urllib2.HTTPError as e:
-        sys.stderr.write(e.read())
-        return
+        LOGGER.exception(e.read())
+        sys.exit(1)
     except:
-        import traceback
-
-        sys.stderr.write(traceback.format_exc())
-        return
+        LOGGER.exception('read datapoint failed')
+        sys.exit(1)
     for metric_name, rows in result_map.iteritems():
         for row in rows or []:
-            datapoint = {'value': row.pop('value', 0)}
+            datapoint = {}
+            datapoint['timestamp'] = ts
+            datapoint['name'] = row.pop('_metric_name', None) or metric_name
+            datapoint['value'] = row.pop('value', 0)
             if row:
                 tags = {}
                 for k, v in row.iteritems():
                     tags[to_str(k)] = to_str(v)
                 datapoint['tags'] = tags
-            datapoint['name'] = datapoint.get('tags', {}).pop('_metric_name', None) or metric_name
-            datapoint['timestamp'] = ts
             datapoints.append(datapoint)
+    LOGGER.info('read datapoints: %s' % len(datapoints))
     return datapoints
 
 
 if __name__ == "__main__":
+    logging.getLogger().setLevel(logging.INFO)
+    handler = logging.handlers.RotatingFileHandler('/tmp/es-monitor.log', maxBytes=1024 * 1024, backupCount=0)
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    logging.getLogger().addHandler(handler)
     url = sys.argv[1]
     cache_key = '/tmp/es-monitor-%s' % base64.b64encode(url)
     if os.path.exists(cache_key):
