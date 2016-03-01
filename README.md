@@ -1,5 +1,7 @@
 [![Gitter](https://badges.gitter.im/taowen/es-monitor.svg)](https://gitter.im/taowen/es-monitor?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
+A set of tools to query Elasticsearch with SQL
+
 Tutorial in Chinese: https://segmentfault.com/a/1190000003502849
 
 # As Monitor Plugin
@@ -48,11 +50,27 @@ The output will be a JSON array containing data points
 For example
 
 ```
-cat << EOF | python -m elasticsearch_sql http://es_hosts
+cat << EOF | python -m es_sql http://es_hosts
     SELECT "user", "oid", max("@timestamp") as value FROM gs_api_track_
     GROUP BY "user", "oid" WHERE "@timestamp" > 1454239084000
 EOF
 ```
+
+```python -m es_sql``` can be ```es-sql``` if ```pip install es-sql```
+
+# As Python Library
+
+```
+pip install es-sql
+```
+```
+import es_sql
+es_sql.execute_sql(
+    'http://127.0.0.1:9200',
+    'SELECT COUNT(*) FROM your_index WHERE field=%(param)s',
+    arguments={'param': 'value'})
+```
+For more information: https://github.com/taowen/es-monitor/tree/master/es_sql
 
 # As HTTP Api
 
