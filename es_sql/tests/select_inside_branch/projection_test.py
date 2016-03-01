@@ -6,7 +6,7 @@ from es_sql import es_query
 class SelectInsideProjectionTest(unittest.TestCase):
     def test_one_level(self):
         executor = es_query.create_executor([
-            "WITH SELECT MAX(sum_this_year) AS max_all_times FROM symbol AS all_symbols",
+            "WITH all_symbols AS (SELECT MAX(sum_this_year) AS max_all_times FROM symbol)",
             "SELECT ipo_year, SUM(market_cap) AS sum_this_year FROM all_symbols GROUP BY ipo_year LIMIT 5"])
         self.assertEqual(
             {'aggs': {u'max_all_times': {u'max_bucket': {'buckets_path': u'ipo_year.sum_this_year'}},
@@ -16,8 +16,8 @@ class SelectInsideProjectionTest(unittest.TestCase):
 
     def test_two_level(self):
         executor = es_query.create_executor([
-            "WITH SELECT MAX(sum_this_year) AS max_all_times FROM symbol AS all_symbols",
-            "WITH SELECT * FROM all_symbols WHERE sector='Finance' AS finance_symbols",
+            "WITH all_symbols AS (SELECT MAX(sum_this_year) AS max_all_times FROM symbol)",
+            "WITH finance_symbols AS (SELECT * FROM all_symbols WHERE sector='Finance')",
             "SELECT ipo_year, SUM(market_cap) AS sum_this_year FROM finance_symbols GROUP BY ipo_year LIMIT 5"])
         self.assertEqual(
             {'aggs': {u'max_all_times': {u'max_bucket': {'buckets_path': u'finance_symbols>ipo_year.sum_this_year'}},

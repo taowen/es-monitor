@@ -50,9 +50,9 @@ The goal is to be able to express all the necessary elasticsearch DSL
 Elasticsearch support sub aggregations. It can be expressed by multiple sql statements
 
 ```
-WITH SELECT MAX(market_cap) AS max_all_times FROM symbol AS all_symbols;
-WITH SELECT ipo_year, MAX(market_cap) AS max_this_year INSIDE all_symbols
-    GROUP BY ipo_year LIMIT 2 AS per_ipo_year;
+WITH all_symbols AS (SELECT MAX(market_cap) AS max_all_times FROM symbol);
+WITH per_ipo_year AS (SELECT ipo_year, MAX(market_cap) AS max_this_year INSIDE all_symbols
+    GROUP BY ipo_year LIMIT 2);
 ```
 
 ```SELECT INSIDE``` can also be ```SELECT FROM```
@@ -72,7 +72,7 @@ REMOVE RESULT finance_symbols;
 It requires https://github.com/sirensolutions/siren-join
 
 ```
-WITH SELECT symbol FROM symbol WHERE sector='Finance' LIMIT 5 AS finance_symbols;
+WITH finance_symbols AS (SELECT symbol FROM symbol WHERE sector='Finance' LIMIT 5);
 SELECT MAX(adj_close) FROM quote
     JOIN finance_symbols ON quote.symbol = finance_symbols.symbol;
 ```
@@ -591,7 +591,7 @@ TODO: 1.5 hours interval, timezone, offset, script, missing
 }
 ```
 ```
-WITH SELECT COUNT(*) FROM product AS all_products;
+WITH all_products AS (SELECT COUNT(*) FROM product);
 SELECT AVG(price) AS avg_price FROM all_products WHERE color='red';
 ```
 
@@ -799,7 +799,7 @@ SELECT STD_DEVIATION(height) AS s FROM xxx
 }
 ```
 ```
-WITH SELECT * FROM xxx GROUP BY address.country AS countries ORDER BY female_avg_height AS all;
+WITH all AS (SELECT * FROM xxx GROUP BY address.country AS countries ORDER BY female_avg_height);
 SELECT AVG(height) AS female_avg_height FROM all WHERE gender='female'
 ```
 
@@ -834,7 +834,7 @@ TODO: document count error, min_doc_count, script, filtering, collect-to, missin
 }
 ```
 ```
-WITH SELECT month, SUM(price) AS sales FROM sale GROUP BY DATE_TRUNC('month', "date") AS month AS sales_per_month;
+WITH sales_per_month AS (SELECT month, SUM(price) AS sales FROM sale GROUP BY DATE_TRUNC('month', "date") AS month);
 SELECT AVG(sales) AS avg_monthly_sales FROM sales_per_month;
 ```
 
@@ -935,7 +935,7 @@ TODO: unit, gap_policy
 }
 ```
 ```
-WITH SELECT month, SUM(price) AS sales FROM sale GROUP BY DATE_TRUNC('month', "date") AS month AS sales_per_month;
+WITH sales_per_month AS (SELECT month, SUM(price) AS sales FROM sale GROUP BY DATE_TRUNC('month', "date") AS month);
 SELECT MAX(sales) AS max_monthly_sales FROM sales_per_month;
 ```
 
@@ -968,7 +968,7 @@ TODO: gap_policy
 }
 ```
 ```
-WITH SELECT month, SUM(price) AS sales FROM sale GROUP BY DATE_TRUNC('month', "date") AS month AS sales_per_month;
+WITH sales_per_month AS (SELECT month, SUM(price) AS sales FROM sale GROUP BY DATE_TRUNC('month', "date") AS month);
 SELECT MIN(sales) AS min_monthly_sales FROM sales_per_month;
 ```
 
@@ -1001,7 +1001,7 @@ TODO: gap_policy
 }
 ```
 ```
-WITH SELECT month, SUM(price) AS sales FROM sale GROUP BY DATE_TRUNC('month', "date") AS month AS sales_per_month;
+WITH sales_per_month AS (SELECT month, SUM(price) AS sales FROM sale GROUP BY DATE_TRUNC('month', "date") AS month);
 SELECT SUM(sales) AS sum_monthly_sales FROM sales_per_month;
 ```
 

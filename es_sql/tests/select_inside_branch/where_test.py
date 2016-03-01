@@ -6,7 +6,7 @@ from es_sql import es_query
 class SelectInsideBranchWhereTest(unittest.TestCase):
     def test_filter_without_group_by(self):
         executor = es_query.create_executor([
-            "WITH SELECT MAX(market_cap) AS max_all_times FROM symbol AS all_symbols",
+            "WITH all_symbols AS (SELECT MAX(market_cap) AS max_all_times FROM symbol)",
             "SELECT MAX(market_cap) AS max_at_2000 FROM all_symbols WHERE ipo_year=2000"])
         self.assertEqual(
             {'aggs': {'level2': {'filter': {'term': {u'ipo_year': 2000}},
@@ -16,7 +16,7 @@ class SelectInsideBranchWhereTest(unittest.TestCase):
 
     def test_two_filters(self):
         executor = es_query.create_executor([
-            "WITH SELECT MAX(market_cap) AS max_all_times FROM symbol AS all_symbols",
+            "WITH all_symbols AS (SELECT MAX(market_cap) AS max_all_times FROM symbol)",
             "SELECT MAX(market_cap) AS max_at_2000 FROM all_symbols WHERE ipo_year=2000",
             "SELECT MAX(market_cap) AS max_at_2001 FROM all_symbols WHERE ipo_year=2001"])
         self.assertEqual(
@@ -29,8 +29,8 @@ class SelectInsideBranchWhereTest(unittest.TestCase):
 
     def test_filter_upon_filter(self):
         executor = es_query.create_executor([
-            "WITH SELECT MAX(market_cap) AS max_all_times FROM symbol AS all_symbols",
-            "WITH SELECT MAX(market_cap) AS max_at_2000 FROM all_symbols WHERE ipo_year=2000 AS year_2001",
+            "WITH all_symbols AS (SELECT MAX(market_cap) AS max_all_times FROM symbol)",
+            "WITH year_2001 AS (SELECT MAX(market_cap) AS max_at_2000 FROM all_symbols WHERE ipo_year=2000)",
             "SELECT MAX(market_cap) AS max_at_2001_finance FROM year_2001 WHERE sector='Finance'"])
         self.assertEqual(
             {'aggs': {'year_2001': {'filter': {'term': {u'ipo_year': 2000}},
@@ -42,8 +42,8 @@ class SelectInsideBranchWhereTest(unittest.TestCase):
 
     def test_filter_then_group_by(self):
         executor = es_query.create_executor([
-            "WITH SELECT MAX(market_cap) AS max_all_times FROM symbol AS all_symbols",
-            "WITH SELECT MAX(market_cap) AS max_at_2000 FROM all_symbols WHERE ipo_year=2000 AS year_2000",
+            "WITH all_symbols AS (SELECT MAX(market_cap) AS max_all_times FROM symbol)",
+            "WITH year_2000 AS (SELECT MAX(market_cap) AS max_at_2000 FROM all_symbols WHERE ipo_year=2000)",
             "SELECT sector, MAX(market_cap) AS max_per_sector FROM year_2000 GROUP BY sector LIMIT 2"])
         self.assertEqual(
             {

@@ -6,7 +6,7 @@ from es_sql import es_query
 class SelectInsideBranchResponseTest(unittest.TestCase):
     def test_one_child(self):
         executor = es_query.create_executor([
-            "WITH SELECT MAX(market_cap) AS max_all_times FROM symbol AS all_symbols",
+            "WITH all_symbols AS (SELECT MAX(market_cap) AS max_all_times FROM symbol)",
             "SELECT ipo_year, MAX(market_cap) AS max_this_year FROM all_symbols GROUP BY ipo_year LIMIT 5"])
         rows = executor.select_response({
             "hits": {
@@ -78,7 +78,7 @@ class SelectInsideBranchResponseTest(unittest.TestCase):
 
     def test_two_children(self):
         executor = es_query.create_executor([
-            "WITH SELECT MAX(market_cap) AS max_all_times FROM symbol AS all_symbols",
+            "WITH all_symbols AS (SELECT MAX(market_cap) AS max_all_times FROM symbol)",
             "SELECT ipo_year, MAX(market_cap) AS max_this_year FROM all_symbols GROUP BY ipo_year LIMIT 1",
             "SELECT sector, MAX(market_cap) AS max_this_sector FROM all_symbols GROUP BY sector LIMIT 1"])
         rows = executor.select_response({
@@ -133,7 +133,7 @@ class SelectInsideBranchResponseTest(unittest.TestCase):
 
     def test_filter_only_will_not_create_new_row(self):
         executor = es_query.create_executor([
-            "WITH SELECT MAX(market_cap) AS max_all_times FROM symbol AS all_symbols",
+            "WITH all_symbols AS (SELECT MAX(market_cap) AS max_all_times FROM symbol)",
             "SELECT MAX(market_cap) AS max_at_2000 FROM all_symbols WHERE ipo_year=2000",
             "SELECT MAX(market_cap) AS max_at_2001 FROM all_symbols WHERE ipo_year=2001"])
         rows = executor.select_response({
@@ -173,8 +173,8 @@ class SelectInsideBranchResponseTest(unittest.TestCase):
 
     def test_filter_upon_filter(self):
         executor = es_query.create_executor([
-            "WITH SELECT MAX(market_cap) AS max_all_times FROM symbol AS all_symbols",
-            "WITH SELECT MAX(market_cap) AS max_at_2000 FROM all_symbols WHERE ipo_year=2000 AS year_2001",
+            "WITH all_symbols AS (SELECT MAX(market_cap) AS max_all_times FROM symbol)",
+            "WITH year_2001 AS (SELECT MAX(market_cap) AS max_at_2000 FROM all_symbols WHERE ipo_year=2000)",
             "SELECT MAX(market_cap) AS max_at_2001_finance FROM year_2001 WHERE sector='Finance'"])
         rows = executor.select_response({
             "hits": {
@@ -213,8 +213,8 @@ class SelectInsideBranchResponseTest(unittest.TestCase):
 
     def test_filter_then_group_by(self):
         executor = es_query.create_executor([
-            "WITH SELECT MAX(market_cap) AS max_all_times FROM symbol AS all_symbols",
-            "WITH SELECT MAX(market_cap) AS max_at_2000 FROM all_symbols WHERE ipo_year=2000 AS year_2000",
+            "WITH all_symbols AS (SELECT MAX(market_cap) AS max_all_times FROM symbol)",
+            "WITH year_2000 AS (SELECT MAX(market_cap) AS max_at_2000 FROM all_symbols WHERE ipo_year=2000)",
             "SELECT sector, MAX(market_cap) AS max_per_sector FROM year_2000 GROUP BY sector LIMIT 2"])
         rows = executor.select_response({
             "hits": {

@@ -6,8 +6,8 @@ from es_sql import es_query
 class SelectInsideBranchOrderByTest(unittest.TestCase):
     def test_order_by_can_reference_child_buckets(self):
         executor = es_query.create_executor(
-            ["WITH SELECT ipo_year, COUNT(*) AS ipo_count FROM symbol \n"
-             "GROUP BY ipo_year ORDER BY max_in_finance LIMIT 2 AS per_year",
+            ["WITH per_year AS (SELECT ipo_year, COUNT(*) AS ipo_count FROM symbol \n"
+             "GROUP BY ipo_year ORDER BY max_in_finance LIMIT 2)",
              "SELECT MAX(market_cap) AS max_in_finance FROM per_year WHERE sector='Finance'"])
         self.assertEqual(
             {'aggs': {

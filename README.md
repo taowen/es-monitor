@@ -1,17 +1,19 @@
 [![Gitter](https://badges.gitter.im/taowen/es-monitor.svg)](https://gitter.im/taowen/es-monitor?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
-# 插件说明
+Tutorial in Chinese: https://segmentfault.com/a/1190000003502849
+
+# As Monitor Plugin
 
 ```
 ./plugin.sh https://url-to-params
 ```
 
-从 url 处下载的文件内容：
+The url points to a file with format：
 
-* 第一行参数是 elasticsearch 服务器地址
-* 后面是 sql
+* first line: elasticsearch http url
+* remaining lines: sql
 
-比如
+For example
 
 ```
 http://es_hosts
@@ -25,7 +27,7 @@ SELECT count(*) AS value FROM gs_api_track
 SAVE RESULT AS gs_api_track.count;
 ```
 
-监控Elasticsearch集群常用SQL
+Can also use SQL to query Elasticsearch cluster health stats
 ```
 SELECT * FROM _cluster_health
 SELECT * FROM _cluster_state
@@ -39,13 +41,11 @@ SELECT * FROM _indices_stats.all
 SELECT * FROM _indices_stats.[index_name]
 ```
 
-# SQL 查询 Elasticsearch
+The output will be a JSON array containing data points
 
-教程请阅读：https://segmentfault.com/a/1190000003502849
+# As Console Command
 
-## 命令行
-
-在命令行上测试的时候也可以用stdin传sql参数，比如
+For example
 
 ```
 cat << EOF | python -m elasticsearch_sql http://es_hosts
@@ -54,13 +54,13 @@ cat << EOF | python -m elasticsearch_sql http://es_hosts
 EOF
 ```
 
-## HTTP
+# As HTTP Api
 
-启动http服务器（gunicorn）
+Start http server (gunicorn)
 ```
 python -m explorer
 ```
-翻译 SQL 为 Elasticsearch 查询
+Translate SQL to Elasticsearch DSL request
 ```
 $ cat << EOF | curl -X POST -d @- http://127.0.0.1:8000/translate
 SELECT * FROM quote WHERE symbol='AAPL'
@@ -79,7 +79,7 @@ EOF
 }
 ```
 
-用SQL直接查询 Elasticsearch 取得结果
+Use SQL to query Elasticsearch
 ```
 $ cat << EOF | curl -X POST -d @- http://127.0.0.1:8000/search?elasticsearch=http://127.0.0.1:9200
 SELECT COUNT(*) FROM quote WHERE symbol='AAPL'
@@ -97,7 +97,7 @@ EOF
 }
 ```
 
-带参数查询
+Use SQL with arguments
 ```
 $ cat << EOF | curl -X POST -d @- http://127.0.0.1:8000/search_with_arguments
 {
