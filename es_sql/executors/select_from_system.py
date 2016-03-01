@@ -111,7 +111,7 @@ def execute(es_url, sql_select):
             collect_stats_rows(rows, response.get('_all', {}), ['indices', 'all'])
             all_rows.extend(rows)
         response = {'hits': {'hits': all_rows}}
-    if sql_select.where and response['hits']['hits']:
+    if sql_select.where and response and response['hits']['hits']:
         columns = sorted(response['hits']['hits'][0]['_source'].keys())
         import sqlite3
         with sqlite3.connect(':memory:') as conn:
