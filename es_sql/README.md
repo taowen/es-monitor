@@ -1075,7 +1075,54 @@ SELECT month, SUM(price) AS sales, CSUM(sales) AS cumulative_sales
 
 ## Bucket Script Aggregation
 
-TODO
+```
+{
+    "aggs" : {
+        "sales_per_month" : {
+            "date_histogram" : {
+                "field" : "date",
+                "interval" : "month"
+            },
+            "aggs": {
+                "total_sales": {
+                    "sum": {
+                        "field": "price"
+                    }
+                },
+                "t-shirts": {
+                  "filter": {
+                    "term": {
+                      "type": "t-shirt"
+                    }
+                  },
+                  "aggs": {
+                    "sales": {
+                      "sum": {
+                        "field": "price"
+                      }
+                    }
+                  }
+                },
+                "t-shirt-percentage": {
+                    "bucket_script": {
+                        "buckets_path": {
+                          "tShirtSales": "t-shirts>sales",
+                          "totalSales": "total_sales"
+                        },
+                        "script": "tShirtSales / totalSales * 100"
+                    }
+                }
+            }
+        }
+    }
+}
+```
+```
+WITH sales_per_month AS (
+    SELECT month, SUM(price) AS total_sales, tshirt_sales/total_sales AS t-shirt-percentage
+    FROM sale GROUP BY DATE_TRUNC('month', "date") AS month);
+SELECT SUM(price) AS tshirt_sales FROM sales_per_month WHERE type='t-shirt';
+```
 
 ## Bucket Selector Aggregation
 
