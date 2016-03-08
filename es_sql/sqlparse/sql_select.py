@@ -55,7 +55,7 @@ class SqlSelect(object):
 
     def on_SELECT(self, tokens):
         if not (ttypes.DML == tokens[0].ttype and 'SELECT' == tokens[0].value.upper()):
-            raise Exception('it is not SELECT: %s' % tokens[0])
+            raise Exception('it is not SELECT: %s' % tokens)
         idx = 1
         from_table_found = False
         while idx < len(tokens):

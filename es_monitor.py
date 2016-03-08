@@ -48,7 +48,9 @@ def query_datapoints(config):
             if row:
                 tags = {}
                 for k, v in row.iteritems():
-                    tags[to_str(k)] = to_str(v)
+                    k = to_str(k)
+                    if not k.startswith('_'):
+                        tags[k] = to_str(v)
                 datapoint['tags'] = tags
             datapoints.append(datapoint)
     LOGGER.info('read datapoints: %s' % len(datapoints))

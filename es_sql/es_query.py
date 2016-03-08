@@ -58,8 +58,8 @@ def create_executor(sql_selects, joinable_results=None):
                 continue
             match = re.match(r'^WITH\s+(.*)\s+AS\s+\((.*)\)\s*$', sql_select, re.IGNORECASE | re.DOTALL)
             if match:
-                executor_name = match.group(1)
-                sql_select = match.group(2)
+                executor_name = match.group(1).strip()
+                sql_select = match.group(2).strip()
             sql_select = SqlSelect.parse(sql_select, joinable_results, executor_map)
         if not isinstance(sql_select.from_table, basestring):
             raise Exception('nested SELECT is not supported')
