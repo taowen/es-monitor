@@ -59,7 +59,10 @@ def query_datapoints(config):
 
 if __name__ == "__main__":
     logging.getLogger().setLevel(logging.INFO)
-    handler = logging.handlers.RotatingFileHandler('/tmp/es-monitor.log', maxBytes=1024 * 1024, backupCount=0)
+    home = os.getenv('HOME')
+    if not home:
+        home = '/tmp'
+    handler = logging.handlers.RotatingFileHandler(os.path.join(home, '.es-monitor.log'), maxBytes=1024 * 1024, backupCount=0)
     handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
     logging.getLogger().addHandler(handler)
     try:
