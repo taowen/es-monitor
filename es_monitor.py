@@ -62,18 +62,22 @@ if __name__ == "__main__":
     handler = logging.handlers.RotatingFileHandler('/tmp/es-monitor.log', maxBytes=1024 * 1024, backupCount=0)
     handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
     logging.getLogger().addHandler(handler)
-    url = sys.argv[1]
-    if url.startswith('file:///'):
-        with open(url.replace('file:///', '/'), 'r') as f:
-            content = f.read()
-    else:
-        cache_key = '/tmp/es-monitor-%s' % base64.b64encode(url)
-        if os.path.exists(cache_key):
-            with open(cache_key) as f:
+    try:
+        url = sys.argv[1] if len(sys.argv) > 1 else 'file:///home/rd/es-monitor/current.conf'
+        if url.startswith('file:///'):
+            with open(url.replace('file:///', '/'), 'r') as f:
                 content = f.read()
         else:
-            resp = urllib2.urlopen(url)
-            content = resp.read()
-            with open(cache_key, 'w') as f:
-                f.write(content)
-    print json.dumps(query_datapoints(content))
+            cache_key = '/tmp/es-monitor-%s' % base64.b64encode(url)
+            if os.path.exists(cache_key):
+                with open(cache_key) as f:
+                    content = f.read()
+            else:
+                resp = urllib2.urlopen(url)
+                content = resp.read()
+                with open(cache_key, 'w') as f:
+                    f.write(content)
+        print json.dumps(query_datapoints(content))
+    except:
+        LOGGER.exception('failed to run')
+        sys.exit(1)
