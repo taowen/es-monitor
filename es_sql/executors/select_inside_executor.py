@@ -32,10 +32,10 @@ class SelectInsideExecutor(object):
         for projection_name, projection in self.sql_select.projections.iteritems():
             if bucket_script_translator.is_count_star(projection):
                 buckets_names[projection_name] = ['_count']
-            elif projection_name in self.sql_select.group_by:
-                buckets_names[projection_name] = ['_key']
             else:
                 buckets_names[projection_name] = [projection_name]
+        for group_by_name in self.sql_select.group_by.keys():
+            buckets_names[group_by_name] = ['_key']
         for child_executor in self.children:
             child_prefix = child_executor.sql_select.group_by.keys()
             child_buckets_names = child_executor.list_buckets_names()

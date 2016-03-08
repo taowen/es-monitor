@@ -200,7 +200,7 @@ class SqlSelect(object):
                 elif id.is_field():
                     group_by_as = id.as_field_name()
                     if group_by_as in self.projections:
-                        self.group_by[group_by_as] = self.projections[group_by_as]
+                        self.group_by[group_by_as] = self.projections.pop(group_by_as)
                     else:
                         self.group_by[group_by_as] = id
                 elif isinstance(id, stypes.Expression):

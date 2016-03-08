@@ -2,6 +2,7 @@ import json
 
 from es_sql.sqlparse import sql as stypes
 from es_sql.sqlparse import tokens as ttypes
+from . import bucket_script_translator
 
 
 def translate_metrics(sql_select):
@@ -12,10 +13,7 @@ def translate_metrics(sql_select):
             continue
         if ttypes.Wildcard == projection.ttype:
             continue
-        if not isinstance(projection, stypes.Function):
-            raise Exception('can only select group by fields or function in aggregation mode: %s'
-                            % sql_select.group_by.keys())
-        request, selector = translate_metric(sql_select.buckets_names, projection, projection_name)
+        request, selector = translate_metric(sql_select, projection, projection_name)
         if request:
             projection_mapped_to = request.pop('_projection_mapped_to_', None)
             if projection_mapped_to:
@@ -29,24 +27,32 @@ def translate_metrics(sql_select):
     return metric_request, metric_selector
 
 
-def translate_metric(buckets_names, sql_function, projection_name):
-    if not isinstance(sql_function, stypes.Function):
-        raise Exception('unexpected: %s' % repr(sql_function))
-    sql_function_name = sql_function.tokens[0].value.upper()
-    if 'COUNT' == sql_function_name:
-        return translate_count(buckets_names, sql_function, projection_name)
-    elif sql_function_name in ('MAX', 'MIN', 'AVG', 'SUM'):
-        return translate_min_max_avg_sum(buckets_names, sql_function, projection_name)
-    elif sql_function_name in ('CSUM', 'DERIVATIVE'):
-        return translate_csum_derivative(buckets_names, sql_function, projection_name)
-    elif sql_function_name in ('MOVING_AVG', 'SERIAL_DIFF'):
-        return translate_moving_avg_serial_diff(buckets_names, sql_function, projection_name)
-    elif sql_function_name in (
-    'SUM_OF_SQUARES', 'VARIANCE', 'STD_DEVIATION', 'STD_DEVIATION_UPPER_BOUND', 'STD_DEVIATION_LOWER_BOUND'):
-        return translate_extended_stats(buckets_names, sql_function, projection_name)
+def translate_metric(sql_select, sql_function, projection_name):
+    buckets_names = sql_select.buckets_names
+    if isinstance(sql_function, stypes.Function):
+        sql_function_name = sql_function.tokens[0].value.upper()
+        if 'COUNT' == sql_function_name:
+            return translate_count(buckets_names, sql_function, projection_name)
+        elif sql_function_name in ('MAX', 'MIN', 'AVG', 'SUM'):
+            return translate_min_max_avg_sum(buckets_names, sql_function, projection_name)
+        elif sql_function_name in ('CSUM', 'DERIVATIVE'):
+            return translate_csum_derivative(buckets_names, sql_function, projection_name)
+        elif sql_function_name in ('MOVING_AVG', 'SERIAL_DIFF'):
+            return translate_moving_avg_serial_diff(buckets_names, sql_function, projection_name)
+        elif sql_function_name in (
+        'SUM_OF_SQUARES', 'VARIANCE', 'STD_DEVIATION', 'STD_DEVIATION_UPPER_BOUND', 'STD_DEVIATION_LOWER_BOUND'):
+            return translate_extended_stats(buckets_names, sql_function, projection_name)
+        else:
+            raise Exception('unsupported function: %s' % repr(sql_function))
+    elif isinstance(sql_function, stypes.Expression):
+        return translate_expression(sql_select, sql_function, projection_name)
     else:
-        raise Exception('unsupported function: %s' % repr(sql_function))
+        raise Exception('unexpected: %s' % repr(sql_function))
 
+
+def translate_expression(sql_select, sql_function, projection_name):
+    selector = lambda bucket: bucket[projection_name]['value']
+    return {'bucket_script': bucket_script_translator.translate_script(sql_select, sql_function.tokens)}, selector
 
 def translate_count(buckets_names, sql_function, projection_name):
     params = sql_function.get_parameters()
