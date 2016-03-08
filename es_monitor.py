@@ -63,13 +63,17 @@ if __name__ == "__main__":
     handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
     logging.getLogger().addHandler(handler)
     url = sys.argv[1]
-    cache_key = '/tmp/es-monitor-%s' % base64.b64encode(url)
-    if os.path.exists(cache_key):
-        with open(cache_key) as f:
+    if url.startswith('file:///'):
+        with open(url.replace('file:///', '/'), 'r') as f:
             content = f.read()
     else:
-        resp = urllib2.urlopen(url)
-        content = resp.read()
-        with open(cache_key, 'w') as f:
-            f.write(content)
+        cache_key = '/tmp/es-monitor-%s' % base64.b64encode(url)
+        if os.path.exists(cache_key):
+            with open(cache_key) as f:
+                content = f.read()
+        else:
+            resp = urllib2.urlopen(url)
+            content = resp.read()
+            with open(cache_key, 'w') as f:
+                f.write(content)
     print json.dumps(query_datapoints(content))
