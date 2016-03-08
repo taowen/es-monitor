@@ -13,7 +13,7 @@ def translate_group_by(group_by_map):
                 raise Exception('unexpected: %s' % group_by)
             group_by = group_by.tokens[1]
         if group_by.is_field():
-            tail_aggs = append_terms_aggs(tail_aggs, group_by_name)
+            tail_aggs = append_terms_aggs(tail_aggs, group_by, group_by_name)
         elif isinstance(group_by, stypes.Case):
             tail_aggs = append_range_aggs(tail_aggs, group_by, group_by_name)
         elif isinstance(group_by, stypes.Function):
@@ -33,10 +33,10 @@ def translate_group_by(group_by_map):
     return aggs, tail_aggs
 
 
-def append_terms_aggs(tail_aggs, group_by_name):
+def append_terms_aggs(tail_aggs, group_by, group_by_name):
     new_tail_aggs = {}
     tail_aggs[group_by_name] = {
-        'terms': {'field': group_by_name, 'size': 0},
+        'terms': {'field': group_by.as_field_name(), 'size': 0},
         'aggs': new_tail_aggs
     }
     return new_tail_aggs
