@@ -107,9 +107,9 @@ class SqlSelect(object):
         self.projections = {}
         for id in ids:
             if isinstance(id, stypes.Identifier):
-                self.projections[id.get_name() or str(id)] = id.without_as()
-            elif ttypes.String.Symbol == id.ttype:
-                self.projections[id.value[1:-1]] = id
+                self.projections[id.get_name()] = id.without_as()
+            elif id.is_field():
+                self.projections[id.as_field_name()] = id
             else:
                 self.projections[str(id)] = id
 
@@ -198,7 +198,11 @@ class SqlSelect(object):
                 if ttypes.Keyword == id.ttype:
                     raise Exception('%s is keyword' % id.value)
                 elif id.is_field():
-                    self.group_by[id.as_field_name()] = id
+                    group_by_as = id.as_field_name()
+                    if group_by_as in self.projections:
+                        self.group_by[group_by_as] = self.projections[group_by_as]
+                    else:
+                        self.group_by[group_by_as] = id
                 elif isinstance(id, stypes.Expression):
                     self.group_by[id.value] = id
                 elif isinstance(id, stypes.Identifier):

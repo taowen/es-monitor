@@ -431,7 +431,6 @@ KEYWORDS = {
     'TEMPORARY': tokens.Keyword,
     'TERMINATE': tokens.Keyword,
     'THAN': tokens.Keyword,
-    'TIMESTAMP': tokens.Keyword,
     'TIMEZONE_HOUR': tokens.Keyword,
     'TIMEZONE_MINUTE': tokens.Keyword,
     'TO': tokens.Keyword,
@@ -491,8 +490,6 @@ KEYWORDS = {
     'WORK': tokens.Keyword,
     'WRITE': tokens.Keyword,
 
-    'YEAR': tokens.Keyword,
-
     'ZONE': tokens.Keyword,
 
     # Name.Builtin
@@ -504,7 +501,6 @@ KEYWORDS = {
     'BOOLEAN': tokens.Name.Builtin,
     'CHAR': tokens.Name.Builtin,
     'CHARACTER': tokens.Name.Builtin,
-    'DATE': tokens.Name.Builtin,
     'DEC': tokens.Name.Builtin,
     'DECIMAL': tokens.Name.Builtin,
     'FLOAT': tokens.Name.Builtin,

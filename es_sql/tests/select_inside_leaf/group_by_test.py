@@ -16,6 +16,12 @@ class SelectInsideLeafGroupByTest(unittest.TestCase):
             {'aggs': {'year': {'terms': {'field': 'ipo_year', 'size': 0}, 'aggs': {}}}, 'size': 0},
             executor.request)
 
+    def test_group_by_can_be_put_in_select(self):
+        executor = es_query.create_executor("SELECT ipo_year AS year, COUNT(*) FROM symbol GROUP BY year")
+        self.assertEqual(
+            {'aggs': {'year': {'terms': {'field': 'ipo_year', 'size': 0}, 'aggs': {}}}, 'size': 0},
+            executor.request)
+
     def test_group_by_two(self):
         executor = es_query.create_executor("SELECT ipo_year, COUNT(*) FROM symbol GROUP BY ipo_year, abc")
         self.assertEqual(
