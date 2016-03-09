@@ -88,6 +88,7 @@ def try_merge_filter(new_filter, last_filter):
                 if last_filter['range'].get(k, {}).get(o):
                     return None
             for o in new_filter['range'][k]:
+                last_filter['range'][k] = last_filter['range'].get(k, {})
                 last_filter['range'][k][o] = new_filter['range'][k][o]
         return dict(last_filter)
     if ['type'] == last_filter.keys() and ['ids'] == new_filter.keys():
