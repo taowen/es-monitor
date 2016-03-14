@@ -1,6 +1,8 @@
 import json
 import sys
 import logging
+import urllib2
+import sys
 
 from . import es_query
 
@@ -16,4 +18,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except urllib2.HTTPError as e:
+        print(e.read())
+        sys.exit(1)
+
