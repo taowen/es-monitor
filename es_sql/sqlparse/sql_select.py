@@ -156,7 +156,9 @@ class SqlSelect(object):
         is_on = False
         while idx < len(tokens):
             token = tokens[idx]
-            if ttypes.Keyword == token.ttype and token.value.upper() in ('ORDER', 'LIMIT', 'GROUP', 'WHERE', 'HAVING'):
+            if isinstance(token, stypes.Where):
+                break
+            if ttypes.Keyword == token.ttype and token.value.upper() in ('ORDER', 'LIMIT', 'GROUP', 'HAVING'):
                 break
             idx += 1
             if is_on:

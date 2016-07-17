@@ -284,3 +284,12 @@ class TestSqlSelectJoin(unittest.TestCase):
             'SELECT * FROM quote JOIN matched_symbols ON quote.symbol = matched_symbols.symbol')
         self.assertEqual('matched_symbols', sql_select.join_table)
         self.assertTrue(len(sql_select.join_conditions) > 0)
+
+    def test_where_should_not_be_part_of_join_condition(self):
+        sql_select = SqlSelect.parse(
+            """select  phone from cn_tag_data_info_es
+join base_info on  cn_tag_data_info_es.phone = base_info.phone
+where cn_tag_data_info_es.date_str='2016-07-07'
+group by phone
+            """)
+        self.assertIsNotNone(sql_select.where)
