@@ -293,3 +293,14 @@ where cn_tag_data_info_es.date_str='2016-07-07'
 group by phone
             """)
         self.assertIsNotNone(sql_select.where)
+
+    def test_group_by_and_having(self):
+        sql_select = SqlSelect.parse(
+            """SELECT phone, sum(cr_car_xiangqing_count) as total_count
+  FROM cn_tag_data_info_es
+      JOIN base_info ON cn_tag_data_info_es.phone = base_info.phone
+ WHERE date_str >= "2016-05-01" and date_str <= "2016-05-03"
+ GROUP BY phone
+ HAVING total_count > 9""")
+        self.assertIsNotNone(sql_select.where)
+        self.assertIsNotNone(sql_select.having)

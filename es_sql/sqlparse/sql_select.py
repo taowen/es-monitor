@@ -92,14 +92,13 @@ class SqlSelect(object):
                 self.set_projections(token)
                 continue
             else:
-                print(tokens)
                 raise Exception('unexpected: %s' % repr(token))
 
     def set_projections(self, token):
         if token.ttype == ttypes.Punctuation:
-            raise Exception('a.b should use the form "a.b"')
+            raise Exception('a.b should use the form "a.b", unexpected: %s' % token)
         if self.projections:
-            raise Exception('projections has already been set')
+            raise Exception('projections has already been set, unexpected: %s' % token)
         if isinstance(token, stypes.IdentifierList):
             ids = list(token.get_identifiers())
         else:

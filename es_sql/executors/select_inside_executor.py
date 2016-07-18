@@ -11,7 +11,7 @@ from .select_from_leaf_executor import search_es
 class SelectInsideExecutor(object):
     def __init__(self, sql_select):
         self.sql_select = sql_select
-        self.request = {}
+        self.request = {'query': {}}
         self.children = []
 
     def add_child(self, executor):
