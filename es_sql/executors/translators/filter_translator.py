@@ -110,7 +110,6 @@ def create_comparision_filter(comparison, tables=None):
     if operator in ('>', '>=', '<', '<='):
         right_operand_as_value = eval_value(right_operand)
         left_operand_as_value = eval_value(left_operand)
-        simple_types = (ttypes.Number.Integer, ttypes.Number.Float)
         if left_operand.is_field() and right_operand_as_value is not None:
             operator_as_str = {'>': 'gt', '>=': 'gte', '<': 'lt', '<=': 'lte'}[operator]
             add_field_hint_to_parameter(right_operand_as_value, left_operand.as_field_name())
@@ -127,7 +126,6 @@ def create_comparision_filter(comparison, tables=None):
         cross_table_eq = eval_cross_table_eq(tables, left_operand, right_operand)
         if cross_table_eq:
             return cross_table_eq
-        simple_types = (ttypes.Number.Integer, ttypes.Number.Float, ttypes.String.Single)
         right_operand_as_value = eval_value(right_operand)
         left_operand_as_value = eval_value(left_operand)
         if left_operand.is_field() and right_operand_as_value is not None:
@@ -156,6 +154,10 @@ def create_comparision_filter(comparison, tables=None):
     elif operator in ('!=', '<>'):
         if right_operand.is_field():
             left_operand, right_operand = right_operand, left_operand
+        elif left_operand.is_field():
+            pass
+        else:
+            raise Exception('complex not equal condition not supported: %s' % comparison)
         right_operand = eval_value(right_operand)
         add_field_hint_to_parameter(right_operand, left_operand.as_field_name())
         return {'bool': {'must_not': {'term': {left_operand.as_field_name(): right_operand}}}}
