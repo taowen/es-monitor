@@ -29,6 +29,16 @@ SELECT count(*) AS value FROM gs_api_track
 SAVE RESULT AS gs_api_track.count;
 ```
 
+Basic authentication is supported
+
+```
+cat << EOF | python -m es_sql http://xxx:8000/
+    VAR username=hello;
+    VAR password=world;
+    SELECT count(*) FROM my_index
+EOF
+```
+
 Can also use SQL to query Elasticsearch cluster health stats
 ```
 SELECT * FROM _cluster_health

@@ -15,6 +15,7 @@ from .sqlparse.sql_select import SqlSelect
 LOGGER = logging.getLogger(__name__)
 
 def execute_sql(es_url, sql, arguments=None):
+    arguments = arguments or {}
     current_sql_selects = []
     result_map = {}
     for sql_select in sql.split(';'):
@@ -25,9 +26,12 @@ def execute_sql(es_url, sql, arguments=None):
         if is_sql:
             current_sql_selects.append(sql_select)
         else:
+            is_var = re.match(r'^VAR\s+(.*)=(.*)$', sql_select, re.IGNORECASE | re.DOTALL)
             is_save = re.match(r'^SAVE\s+RESULT\s+AS\s+(.*)$', sql_select, re.IGNORECASE | re.DOTALL)
             is_remove = re.match(r'^REMOVE\s+RESULT\s+(.*)$', sql_select, re.IGNORECASE | re.DOTALL)
-            if is_save:
+            if is_var:
+                arguments[is_var.group(1)] = is_var.group(2)
+            elif is_save:
                 result_name = is_save.group(1)
                 result_map[result_name] = create_executor(current_sql_selects, result_map).execute(es_url, arguments)
                 current_sql_selects = []

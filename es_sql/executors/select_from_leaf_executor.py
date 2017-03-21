@@ -3,6 +3,7 @@ import logging
 import time
 import urllib2
 import json
+import base64
 
 from es_sql.sqlparse import sql as stypes
 from es_sql.sqlparse import tokens as ttypes
@@ -64,15 +65,15 @@ class SelectFromLeafExecutor(object):
         return rows
 
 
-def search_es(url, request, arguments=None):
+def search_es(url, request, arguments=None, http_opener=None):
     arguments = arguments or {}
     parameters = request.pop('_parameters_', {})
     if parameters:
         pset = set(parameters.keys())
         aset = set(arguments.keys())
-        if (pset - aset):
+        if pset - aset:
             raise Exception('not all parameters have been specified: %s' % (pset - aset))
-        if (aset - pset):
+        if aset - pset:
             raise Exception('too many arguments specified: %s' % (aset - pset))
     for param_name, param in parameters.iteritems():
         level = request
@@ -82,11 +83,19 @@ def search_es(url, request, arguments=None):
     request_id = time.time()
     if LOGGER.isEnabledFor(logging.DEBUG):
         LOGGER.debug('[%s] === send request to: %s\n%s' % (request_id, url, json.dumps(request, indent=2)))
-    request = urllib2.Request(url, headers={
-        'kbn-xsrf-token': 'e6d4b4da34778b7ec0f25aae7480b5091caf39758b2c4f08f6ffe6e794b6e6fd'
-    }, data=json.dumps(request))
-    resp = urllib2.urlopen(request).read()
-    response = json.loads(resp)
+    headers = {
+        'kbn-xsrf-token': arguments.get(
+            'kbn-xsrf-token', 'e6d4b4da34778b7ec0f25aae7480b5091caf39758b2c4f08f6ffe6e794b6e6fd')
+    }
+    if arguments.get('username'):
+        auth_token = base64.encodestring('%s:%s' % (arguments['username'], arguments['password'])).replace('\n', '')
+        headers['Authorization'] = 'Basic %s' % auth_token
+    http_request = urllib2.Request(url, headers=headers, data=json.dumps(request))
+    if http_opener:
+        resp = http_opener.open(http_request)
+    else:
+        resp = urllib2.urlopen(http_request)
+    response = json.loads(resp.read())
     if LOGGER.isEnabledFor(logging.DEBUG):
         LOGGER.debug('[%s] === received response:\n%s' % (request_id, json.dumps(response, indent=2)))
     return response
