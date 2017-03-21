@@ -82,7 +82,10 @@ def search_es(url, request, arguments=None):
     request_id = time.time()
     if LOGGER.isEnabledFor(logging.DEBUG):
         LOGGER.debug('[%s] === send request to: %s\n%s' % (request_id, url, json.dumps(request, indent=2)))
-    resp = urllib2.urlopen(url, json.dumps(request)).read()
+    request = urllib2.Request(url, headers={
+        'kbn-xsrf-token': 'e6d4b4da34778b7ec0f25aae7480b5091caf39758b2c4f08f6ffe6e794b6e6fd'
+    }, data=json.dumps(request))
+    resp = urllib2.urlopen(request).read()
     response = json.loads(resp)
     if LOGGER.isEnabledFor(logging.DEBUG):
         LOGGER.debug('[%s] === received response:\n%s' % (request_id, json.dumps(response, indent=2)))
